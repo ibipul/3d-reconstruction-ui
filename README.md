@@ -14,14 +14,16 @@ steer the result. The solver is a port of `loader_wt_control_rec_error_trace.m`.
 - `web/mock/` – the static layout mock
 - `tests/` – unit tests · `scripts/` – `fetch_data.sh`, `smoke.py`, `export_masks.py`, `smoothing_sweep.py` · `docs/` – porting notes
 
+## Live app
+https://ibipul.github.io/3d-reconstruction-ui/ (GitHub Pages; the first load downloads Pyodide, NumPy and SciPy, about 30 MB)
+
 ## Quick start
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install numpy scipy pytest pillow
 PYTHONPATH=src .venv/bin/python -m pytest -q tests
 
-# the web app (needs the MATLAB repo's datasets, copied into web/app/data/)
-scripts/fetch_data.sh ~/codes/3d-reconstruction-ui-matlab
+# the web app (the two datasets are committed in web/app/data/; scripts/fetch_data.sh refreshes them)
 python3 -m http.server 8000      # then open http://localhost:8000/web/app/
 
 # or run the solver natively and print metrics

@@ -7,8 +7,8 @@ page is the UI. The static layout mock lives in `../mock/`.
 ## Run it
 
 ```sh
-# once: copy the MATLAB repo's datasets into web/app/data/ (git-ignored)
-scripts/fetch_data.sh ~/codes/3d-reconstruction-ui-matlab
+# the datasets are committed in web/app/data/; to refresh them from the MATLAB repo:
+# scripts/fetch_data.sh ~/codes/3d-reconstruction-ui-matlab
 
 # from the repo root (so the page can fetch src/recon3d/*.py)
 python3 -m http.server 8000
