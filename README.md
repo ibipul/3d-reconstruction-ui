@@ -13,3 +13,6 @@ Python port of [ibipul/3d-reconstruction-ui-matlab](https://github.com/ibipul/3d
 2. Parity tests vs MATLAB outputs (dataset25, dataset_sentinel_gt)
 3. Local GUI (matplotlib)
 4. Web UI via Pyodide
+
+## Docs
+- [MATLAB codebase map](docs/matlab-architecture.md) – how the original scripts and functions fit together
