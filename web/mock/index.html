@@ -1,0 +1,494 @@
+<title>Interactive 3D Reconstruction</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: toolbar on top; below it a scrolling 4-column card grid with a fixed 3D sidebar on the right.
+   Clicking a card opens a focus panel over the grid only, so the sidebar stays visible. */
+:root {
+  --bg: #eff1f5;
+  --surface: #ffffff;
+  --surface-2: #f6f7fa;
+  --ink: #18202e;
+  --muted: #5a6577;
+  --line: #d5dae3;
+  --accent: #2d58d0;
+  --accent-ink: #ffffff;
+  --vp-bg: #141a24;
+  --vp-ink: #aeb8c8;
+  --phi: #e8b923;
+  --phi-hat: #1fb8d3;
+  --mark-in: #27a862;
+  --mark-out: #e0414a;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1218; --surface: #171d27; --surface-2: #1d2531; --ink: #e5e9f0; --muted: #93a0b3;
+    --line: #2a3342; --accent: #86a2ff; --accent-ink: #0e1218; --vp-bg: #0a0d12; --vp-ink: #8f9bad;
+    --phi: #f0c53a; --phi-hat: #3bcbe3; --mark-in: #3ec97e; --mark-out: #f2585f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1218; --surface: #171d27; --surface-2: #1d2531; --ink: #e5e9f0; --muted: #93a0b3;
+  --line: #2a3342; --accent: #86a2ff; --accent-ink: #0e1218; --vp-bg: #0a0d12; --vp-ink: #8f9bad;
+  --phi: #f0c53a; --phi-hat: #3bcbe3; --mark-in: #3ec97e; --mark-out: #f2585f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.4;
+  padding-block: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 12px;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* toolbar */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-top: 12px; }
+.bar h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+.chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); }
+.group { display: flex; align-items: center; gap: 6px; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; min-height: 32px; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { filter: brightness(1.08); }
+.readout { color: var(--muted); font-size: 12px; }
+.readout b { color: var(--ink); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-left: auto; font-size: 12px; color: var(--muted); }
+.legend label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.swatch.dot { height: 9px; width: 9px; border-radius: 50%; }
+
+/* workspace */
+.work { flex: 1; min-height: 0; display: flex; gap: 14px; padding-bottom: 12px; }
+.stage { position: relative; flex: 1; min-width: 0; min-height: 0; }
+.grid {
+  height: 100%; overflow: auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px; align-content: start; padding-right: 4px;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px;
+  display: flex; flex-direction: column; gap: 5px; text-align: left; min-width: 0;
+}
+.card:hover { border-color: var(--accent); }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card canvas { width: 100%; height: auto; aspect-ratio: 200 / 320; display: block; border-radius: 4px; background: var(--surface-2); }
+.card .meta { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; gap: 6px; }
+.card .meta .n { font-weight: 600; }
+.card .meta .ang { color: var(--muted); font-size: 11px; }
+.card .marks { font-size: 11px; color: var(--muted); min-height: 16px; display: flex; gap: 8px; }
+.marks .in::before, .marks .out::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+.marks .in::before { background: var(--mark-in); } .marks .out::before { background: var(--mark-out); }
+
+/* focus panel */
+.focus {
+  position: absolute; inset: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px; z-index: 5;
+}
+.focus-head { display: flex; align-items: center; gap: 10px; }
+.focus-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
+.focus-head h2 span { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+.focus-body { flex: 1; min-height: 0; display: flex; gap: 14px; }
+.canvas-wrap { flex: 1; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border-radius: 8px; }
+.canvas-wrap canvas { display: block; border-radius: 4px; }
+.tools { width: 210px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.tools h3 { margin: 0; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.seg { display: flex; flex-direction: column; gap: 6px; }
+.tool { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.tool:hover { background: var(--surface-2); }
+.tool[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--surface); }
+.tool kbd { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.tools .row { display: flex; gap: 6px; }
+.tools .row .btn { flex: 1; }
+.tools input[type=range] { width: 100%; accent-color: var(--accent); }
+.hint { font-size: 12px; color: var(--muted); }
+
+/* sidebar */
+.side { width: 320px; flex: none; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.panel h3 { margin: 0; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: flex; justify-content: space-between; }
+#vp { width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; background: var(--vp-bg); cursor: grab; display: block; touch-action: none; }
+#vp:active { cursor: grabbing; }
+#plot { width: 100%; height: 90px; display: block; }
+.stats { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 12px; color: var(--muted); }
+.stats b { color: var(--ink); font-weight: 500; text-align: right; }
+.note { font-size: 11px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  .work { flex-direction: column; }
+  .side { width: auto; order: -1; overflow: visible; }
+  .grid { height: auto; overflow: visible; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-right: 0; }
+  .stage { min-height: 0; }
+  .focus { position: fixed; inset: 0; border-radius: 0; padding-top: max(12px, env(safe-area-inset-top, 0px)); padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .focus-body { flex-direction: column; }
+  .tools { width: auto; }
+  .seg { flex-direction: row; }
+  .tool kbd { display: none; }
+  .legend { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="bar">
+  <h1>Interactive 3D Reconstruction</h1>
+  <span class="chip">layout mock</span>
+  <div class="group">
+    <button class="btn primary" id="run">Run</button>
+    <button class="btn" id="step">Step +10</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="readout mono">iter <b id="r-iter">0</b> / 5000 &nbsp; E <b id="r-e">0.0</b></div>
+  <div class="legend">
+    <label><input type="checkbox" id="t-phi" checked> <span class="swatch" style="background:var(--phi)"></span> φ reconstruction</label>
+    <label><input type="checkbox" id="t-hat" checked> <span class="swatch" style="background:var(--phi-hat)"></span> φ̂ estimate</label>
+    <span><span class="swatch dot" style="background:var(--mark-in)"></span> inside</span>
+    <span><span class="swatch dot" style="background:var(--mark-out)"></span> outside</span>
+  </div>
+</header>
+
+<div class="work">
+  <section class="stage">
+    <div class="grid" id="grid" aria-label="Camera views"></div>
+
+    <div class="focus" id="focus" role="dialog" aria-label="Annotate view" hidden>
+      <div class="focus-head">
+        <button class="btn" id="prev" aria-label="Previous view">&larr;</button>
+        <h2 id="f-title">View 1<span class="mono" id="f-ang"></span></h2>
+        <button class="btn" id="next" aria-label="Next view">&rarr;</button>
+        <button class="btn" id="close">Close <span class="mono" style="color:var(--muted)">Esc</span></button>
+      </div>
+      <div class="focus-body">
+        <div class="canvas-wrap" id="cwrap"><canvas id="fc" width="400" height="640"></canvas></div>
+        <div class="tools">
+          <h3>Annotate</h3>
+          <div class="seg">
+            <button class="tool" id="tool-in" aria-pressed="false"><span class="swatch dot" style="background:var(--mark-in)"></span>Inside <kbd>I</kbd></button>
+            <button class="tool" id="tool-out" aria-pressed="false"><span class="swatch dot" style="background:var(--mark-out)"></span>Outside <kbd>O</kbd></button>
+            <button class="tool" id="tool-erase" aria-pressed="false">Erase stroke <kbd>E</kbd></button>
+          </div>
+          <div>
+            <h3 style="margin-bottom:6px">Brush <span class="mono" id="brush-v" style="text-transform:none;letter-spacing:0"></span></h3>
+            <input type="range" id="brush" min="2" max="16" value="6" aria-label="Brush size">
+          </div>
+          <div class="row">
+            <button class="btn" id="undo">Undo</button>
+            <button class="btn" id="clear">Clear view</button>
+          </div>
+          <p class="hint" id="hint">Pick Inside or Outside, then draw on the image.</p>
+          <p class="hint mono" id="f-counts"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <h3><span>Live shape</span><span class="mono" id="vp-sel">view –</span></h3>
+      <canvas id="vp" width="600" height="600" aria-label="3D shape viewport. Drag to orbit."></canvas>
+      <div class="legend" style="margin-left:0">
+        <label><input type="checkbox" id="t-cams" checked> camera ring</label>
+        <span class="note">drag to orbit</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h3><span>Energy</span><span class="mono" id="plot-v"></span></h3>
+      <canvas id="plot" width="600" height="180"></canvas>
+      <div class="stats mono">
+        <span>voxels φ ≥ 0</span><b id="s-vox">0</b>
+        <span>views marked</span><b id="s-marked">0 / 36</b>
+        <span>strokes</span><b id="s-strokes">0</b>
+      </div>
+    </div>
+    <p class="note">Mock only. Silhouettes come from a colour threshold on the dataset25 images; the 3D shape and energy curve are simulated.</p>
+  </aside>
+</div>
+
+<script>
+(function () {
+  var N = 36, W = 200, H = 320, MAXIT = 5000;
+  var imgs = [], contour = [], contourHat = [];
+  var strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
+  var tool = null, brush = 6, cur = -1, sel = -1, iter = 0, running = false, timer = null;
+  var showPhi = true, showHat = true, showCams = true;
+  var energy = [];
+  var $ = function (id) { return document.getElementById(id); };
+  var grid = $('grid'), cardCanvas = [], cardMarks = [], cardEl = [];
+  var css = function (v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+  var angle = function (i) { return i * 10 + 3; };
+
+  /* ---------- placeholder silhouettes (colour threshold) ---------- */
+  function buildMask(img) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, W, H);
+    var d = x.getImageData(0, 0, W, H).data, m = new Uint8Array(W * H), i, j;
+    for (i = 0; i < W * H; i++) {
+      var r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
+      m[i] = (g - b > 12 && g > r + 8) ? 1 : 0;
+    }
+    var m2 = new Uint8Array(W * H), y, xx, dx, dy, s;   // 3x3 majority filter
+    for (y = 1; y < H - 1; y++) for (xx = 1; xx < W - 1; xx++) {
+      s = 0;
+      for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) s += m[(y + dy) * W + xx + dx];
+      m2[y * W + xx] = s >= 5 ? 1 : 0;
+    }
+    return m2;
+  }
+  function outline(m, ox, oy, rgb) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d'), id = x.createImageData(W, H), y, xx;
+    for (y = 1; y < H - 1; y++) for (xx = 1; xx < W - 1; xx++) {
+      var sx = xx - ox, sy = y - oy;
+      if (sx < 1 || sy < 1 || sx > W - 2 || sy > H - 2) continue;
+      var p = sy * W + sx;
+      if (m[p] && (!m[p - 1] || !m[p + 1] || !m[p - W] || !m[p + W])) {
+        var o = (y * W + xx) * 4; id.data[o] = rgb[0]; id.data[o + 1] = rgb[1]; id.data[o + 2] = rgb[2]; id.data[o + 3] = 255;
+      }
+    }
+    x.putImageData(id, 0, 0); return c;
+  }
+  function hex(v) { v = v.replace('#', ''); return [parseInt(v.substr(0, 2), 16), parseInt(v.substr(2, 2), 16), parseInt(v.substr(4, 2), 16)]; }
+
+  /* ---------- view rendering ---------- */
+  function drawView(ctx, i, s) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, W * s, H * s);
+    ctx.drawImage(imgs[i], 0, 0, W * s, H * s);
+    ctx.imageSmoothingEnabled = false;
+    if (showHat) ctx.drawImage(contourHat[i], 0, 0, W * s, H * s);
+    if (showPhi) ctx.drawImage(contour[i], 0, 0, W * s, H * s);
+    ctx.imageSmoothingEnabled = true;
+    var list = strokes[i];
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (var a = 0; a < list.length; a++) {
+      var st = list[a];
+      ctx.strokeStyle = st.type === 'in' ? css('--mark-in') : css('--mark-out');
+      ctx.fillStyle = ctx.strokeStyle; ctx.globalAlpha = 0.8;
+      ctx.lineWidth = st.size * s;
+      if (st.pts.length === 1) { ctx.beginPath(); ctx.arc(st.pts[0][0] * s, st.pts[0][1] * s, st.size * s / 2, 0, 6.2832); ctx.fill(); }
+      else { ctx.beginPath(); ctx.moveTo(st.pts[0][0] * s, st.pts[0][1] * s); for (var q = 1; q < st.pts.length; q++) ctx.lineTo(st.pts[q][0] * s, st.pts[q][1] * s); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+  }
+  function counts(i) { var a = 0, b = 0; strokes[i].forEach(function (s) { if (s.type === 'in') a++; else b++; }); return [a, b]; }
+  function refreshCard(i) {
+    drawView(cardCanvas[i].getContext('2d'), i, 1);
+    var c = counts(i);
+    cardMarks[i].innerHTML = (c[0] ? '<span class="in mono">' + c[0] + '</span>' : '') + (c[1] ? '<span class="out mono">' + c[1] + '</span>' : '') + (!c[0] && !c[1] ? '<span>no marks</span>' : '');
+    updateStats();
+  }
+  function refreshAllCards() { for (var i = 0; i < N; i++) refreshCard(i); }
+  function updateStats() {
+    var marked = 0, total = 0;
+    for (var i = 0; i < N; i++) { if (strokes[i].length) marked++; total += strokes[i].length; }
+    $('s-marked').textContent = marked + ' / ' + N; $('s-strokes').textContent = total;
+  }
+
+  /* ---------- focus panel ---------- */
+  var fc = $('fc'), fctx = fc.getContext('2d');
+  function fitFocus() {
+    var w = $('cwrap'), r = w.getBoundingClientRect(), pad = 16;
+    var s = Math.min((r.width - pad) / W, (r.height - pad) / H);
+    if (!(s > 0)) return;
+    fc.style.width = Math.floor(W * s) + 'px'; fc.style.height = Math.floor(H * s) + 'px';
+  }
+  function renderFocus() { if (cur >= 0) drawView(fctx, cur, 2); }
+  function openFocus(i) {
+    cur = i; sel = i; $('focus').hidden = false;
+    $('f-title').firstChild.nodeValue = 'View ' + (i + 1);
+    $('f-ang').textContent = angle(i) + '° around turntable';
+    fitFocus(); renderFocus(); updateFocusUI(); markSel();
+  }
+  function closeFocus() { $('focus').hidden = true; cur = -1; if (sel >= 0 && cardEl[sel]) cardEl[sel].focus(); }
+  function go(d) { if (cur < 0) return; openFocus((cur + d + N) % N); }
+  function setTool(t) {
+    tool = (tool === t) ? null : t;
+    $('tool-in').setAttribute('aria-pressed', tool === 'in'); $('tool-out').setAttribute('aria-pressed', tool === 'out'); $('tool-erase').setAttribute('aria-pressed', tool === 'erase');
+    fc.style.cursor = tool ? 'crosshair' : 'default'; fc.style.touchAction = tool ? 'none' : 'auto';
+    updateFocusUI();
+  }
+  function updateFocusUI() {
+    var h = $('hint');
+    h.textContent = tool === 'in' ? 'Drawing inside marks. The object lies here.' : tool === 'out' ? 'Drawing outside marks. Background lies here.' : tool === 'erase' ? 'Drag across a stroke to remove it.' : 'Pick Inside or Outside, then draw on the image.';
+    if (cur >= 0) { var c = counts(cur); $('f-counts').textContent = c[0] + ' inside · ' + c[1] + ' outside strokes'; }
+    $('brush-v').textContent = brush + ' px';
+  }
+  function pt(e) { var r = fc.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+  var drawing = null;
+  fc.addEventListener('pointerdown', function (e) {
+    if (!tool || cur < 0) return;
+    fc.setPointerCapture(e.pointerId); var p = pt(e);
+    if (tool === 'erase') { drawing = 'erase'; eraseAt(p); return; }
+    drawing = { type: tool, size: brush, pts: [p] }; strokes[cur].push(drawing); renderFocus();
+  });
+  fc.addEventListener('pointermove', function (e) {
+    if (!drawing) return; var p = pt(e);
+    if (drawing === 'erase') { eraseAt(p); return; }
+    drawing.pts.push(p); renderFocus();
+  });
+  function endDraw() { if (drawing) { drawing = null; refreshCard(cur); updateFocusUI(); } }
+  fc.addEventListener('pointerup', endDraw); fc.addEventListener('pointercancel', endDraw);
+  function eraseAt(p) {
+    var list = strokes[cur], keep = list.filter(function (s) {
+      var r = s.size / 2 + 5;
+      return !s.pts.some(function (q) { var dx = q[0] - p[0], dy = q[1] - p[1]; return dx * dx + dy * dy < r * r; });
+    });
+    if (keep.length !== list.length) { strokes[cur] = keep; renderFocus(); }
+  }
+  $('undo').onclick = function () { if (cur >= 0) { strokes[cur].pop(); renderFocus(); refreshCard(cur); updateFocusUI(); } };
+  $('clear').onclick = function () { if (cur >= 0) { strokes[cur] = []; renderFocus(); refreshCard(cur); updateFocusUI(); } };
+  $('tool-in').onclick = function () { setTool('in'); };
+  $('tool-out').onclick = function () { setTool('out'); };
+  $('tool-erase').onclick = function () { setTool('erase'); };
+  $('brush').oninput = function (e) { brush = +e.target.value; updateFocusUI(); };
+  $('prev').onclick = function () { go(-1); }; $('next').onclick = function () { go(1); }; $('close').onclick = closeFocus;
+  document.addEventListener('keydown', function (e) {
+    if (cur < 0 || e.target.tagName === 'INPUT') return;
+    var k = e.key;
+    if (k === 'Escape') closeFocus();
+    else if (k === 'ArrowLeft') go(-1); else if (k === 'ArrowRight') go(1);
+    else if (k === 'i' || k === 'I') setTool('in'); else if (k === 'o' || k === 'O') setTool('out'); else if (k === 'e' || k === 'E') setTool('erase');
+    else if ((k === 'z' || k === 'Z') && (e.metaKey || e.ctrlKey)) $('undo').click();
+  });
+  window.addEventListener('resize', function () { if (cur >= 0) { fitFocus(); renderFocus(); } });
+
+  /* ---------- grid ---------- */
+  function markSel() {
+    cardEl.forEach(function (c, i) { c.classList.toggle('sel', i === sel); });
+    $('vp-sel').textContent = sel >= 0 ? 'view ' + (sel + 1) + ' · ' + angle(sel) + '°' : 'view –';
+  }
+  function buildGrid() {
+    for (var i = 0; i < N; i++) {
+      (function (i) {
+        var b = document.createElement('button'); b.className = 'card'; b.type = 'button';
+        b.setAttribute('aria-label', 'Open view ' + (i + 1));
+        b.innerHTML = '<canvas width="' + W + '" height="' + H + '"></canvas><div class="meta"><span class="n mono">' + (i + 1) + '</span><span class="ang mono">' + angle(i) + '°</span></div><div class="marks"></div>';
+        cardCanvas[i] = b.firstChild; cardMarks[i] = b.lastChild; cardEl[i] = b;
+        b.addEventListener('click', function () { openFocus(i); });
+        b.addEventListener('pointerenter', function () { if (cur < 0) { sel = i; markSel(); } });
+        grid.appendChild(b);
+      })(i);
+    }
+  }
+
+  /* ---------- simulated 3D shape ---------- */
+  var NP = 1800, box = [], wing = [], jit = [], rnd = Math.random;
+  (function () {
+    for (var i = 0; i < NP; i++) {
+      box.push([(rnd() - .5) * 1.0, (rnd() - .5) * 1.7, (rnd() - .5) * .7]);
+      var u = rnd() * 2 - 1, au = Math.abs(u), c = .5 * (1 - .75 * au) + .06;
+      wing.push([-.5 * au + (rnd() - .5) * c, u * .95, (rnd() - .5) * .14 * (1 - .8 * au) + (au < .15 ? .05 * rnd() : 0)]);
+      jit.push([rnd() - .5, rnd() - .5, rnd() - .5]);
+    }
+  })();
+  var yaw = 0.7, pitch = 0.45, vp = $('vp'), vctx = vp.getContext('2d'), dragging = null;
+  vp.addEventListener('pointerdown', function (e) { vp.setPointerCapture(e.pointerId); dragging = [e.clientX, e.clientY]; });
+  vp.addEventListener('pointermove', function (e) { if (!dragging) return; yaw += (e.clientX - dragging[0]) * .01; pitch = Math.max(-1.4, Math.min(1.4, pitch + (e.clientY - dragging[1]) * .01)); dragging = [e.clientX, e.clientY]; });
+  vp.addEventListener('pointerup', function () { dragging = null; });
+  function project(x, y, z, S, cx, cy) {
+    var cy_ = Math.cos(yaw), sy_ = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    var x1 = x * cy_ - y * sy_, y1 = x * sy_ + y * cy_;
+    var up = z * cp + y1 * sp, depth = y1 * cp - z * sp;
+    return [cx + x1 * S, cy - up * S, depth];
+  }
+  function drawShape() {
+    var w = vp.width, h = vp.height, S = w * .3, cx = w / 2, cy = h / 2;
+    vctx.fillStyle = css('--vp-bg'); vctx.fillRect(0, 0, w, h);
+    var p = 1 - Math.exp(-iter / 700), ph = 1 - Math.exp(-iter / 1100);
+    // ground grid
+    vctx.strokeStyle = css('--vp-ink'); vctx.globalAlpha = .18; vctx.lineWidth = 1;
+    for (var g = -2; g <= 2; g++) {
+      var a = project(g * .5, -1.2, -.5, S, cx, cy), b = project(g * .5, 1.2, -.5, S, cx, cy); vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
+      a = project(-1.2, g * .5, -.5, S, cx, cy); b = project(1.2, g * .5, -.5, S, cx, cy); vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
+    }
+    vctx.globalAlpha = 1;
+    var i, q, col;
+    if (showHat) {
+      col = css('--phi-hat');
+      for (i = 0; i < NP; i += 2) {
+        q = project(box[i][0] + (wing[i][0] * .96 - box[i][0]) * ph + jit[i][0] * .1 * (1 - ph), box[i][1] + (wing[i][1] * .96 - box[i][1]) * ph + jit[i][1] * .1 * (1 - ph), box[i][2] + (wing[i][2] - box[i][2]) * ph + jit[i][2] * .1 * (1 - ph), S, cx, cy);
+        vctx.globalAlpha = .25 + .35 * (q[2] + 1) / 2; vctx.fillStyle = col; vctx.fillRect(q[0], q[1], 3, 3);
+      }
+    }
+    if (showPhi) {
+      col = css('--phi');
+      for (i = 0; i < NP; i++) {
+        q = project(box[i][0] + (wing[i][0] - box[i][0]) * p + jit[i][0] * .07 * (1 - p), box[i][1] + (wing[i][1] - box[i][1]) * p + jit[i][1] * .07 * (1 - p), box[i][2] + (wing[i][2] - box[i][2]) * p + jit[i][2] * .07 * (1 - p), S, cx, cy);
+        vctx.globalAlpha = .35 + .65 * Math.max(0, Math.min(1, (q[2] + 1) / 2)); vctx.fillStyle = col; vctx.fillRect(q[0], q[1], 3.2, 3.2);
+      }
+    }
+    vctx.globalAlpha = 1;
+    if (showCams) {
+      for (i = 0; i < N; i++) {
+        var t = angle(i) * Math.PI / 180, c3 = project(1.7 * Math.cos(t), 1.7 * Math.sin(t), 0, S, cx, cy), on = i === sel;
+        if (on) { vctx.strokeStyle = css('--accent'); vctx.lineWidth = 2; vctx.beginPath(); vctx.moveTo(c3[0], c3[1]); vctx.lineTo(cx, cy); vctx.stroke(); }
+        vctx.fillStyle = on ? css('--accent') : css('--vp-ink'); vctx.globalAlpha = on ? 1 : .55;
+        vctx.beginPath(); vctx.arc(c3[0], c3[1], on ? 7 : 3.5, 0, 6.2832); vctx.fill(); vctx.globalAlpha = 1;
+      }
+    }
+    var vox = Math.round(34000 + (1 - Math.exp(-iter / 700)) * -6800 + (1 - p) * 0);
+    $('s-vox').textContent = vox.toLocaleString('en-US');
+  }
+
+  /* ---------- energy ---------- */
+  function energyAt(it) { return -(420 * (1 - Math.exp(-it / 350)) + 20 * (1 - Math.exp(-it / 1800))) + Math.sin(it * .37) * 2.2 * Math.exp(-it / 900); }
+  function drawPlot() {
+    var c = $('plot'), x = c.getContext('2d'), w = c.width, h = c.height, padL = 8, padB = 6;
+    x.clearRect(0, 0, w, h);
+    x.strokeStyle = css('--line'); x.lineWidth = 1;
+    for (var g = 0; g <= 3; g++) { var yy = 10 + g * (h - 20) / 3; x.beginPath(); x.moveTo(padL, yy); x.lineTo(w - padL, yy); x.stroke(); }
+    if (energy.length < 2) return;
+    x.strokeStyle = css('--accent'); x.lineWidth = 2.5; x.beginPath();
+    for (var i = 0; i < energy.length; i++) {
+      var px = padL + (energy[i][0] / MAXIT) * (w - 2 * padL), py = 10 + (1 - (-energy[i][1] / 460)) * (h - 20 - padB);
+      if (i) x.lineTo(px, py); else x.moveTo(px, py);
+    }
+    x.stroke();
+    var last = energy[energy.length - 1];
+    x.fillStyle = css('--accent'); x.beginPath(); x.arc(padL + (last[0] / MAXIT) * (w - 2 * padL), 10 + (1 - (-last[1] / 460)) * (h - 20 - padB), 5, 0, 6.2832); x.fill();
+  }
+  function setIter(n) {
+    iter = Math.max(0, Math.min(MAXIT, n));
+    var e = energyAt(iter); energy.push([iter, e]);
+    $('r-iter').textContent = iter; $('r-e').textContent = e.toFixed(1); $('plot-v').textContent = e.toFixed(1);
+    drawPlot();
+    if (iter >= MAXIT) stop();
+  }
+  function start() { running = true; $('run').textContent = 'Pause'; timer = setInterval(function () { setIter(iter + 8); }, 50); }
+  function stop() { running = false; $('run').textContent = 'Run'; clearInterval(timer); }
+  $('run').onclick = function () { running ? stop() : start(); };
+  $('step').onclick = function () { setIter(iter + 10); };
+  $('reset').onclick = function () { stop(); energy = []; iter = 0; $('r-iter').textContent = '0'; $('r-e').textContent = '0.0'; $('plot-v').textContent = ''; drawPlot(); };
+  $('t-phi').onchange = function (e) { showPhi = e.target.checked; refreshAllCards(); renderFocus(); };
+  $('t-hat').onchange = function (e) { showHat = e.target.checked; refreshAllCards(); renderFocus(); };
+  $('t-cams').onchange = function (e) { showCams = e.target.checked; };
+
+  function loop() { drawShape(); requestAnimationFrame(loop); }
+
+  /* ---------- boot ---------- */
+  buildGrid();
+  var loaded = 0;
+  function done() {
+    for (var i = 0; i < N; i++) {
+      var m = buildMask(imgs[i]);
+      contour[i] = outline(m, 0, 0, hex('#f2c230'));
+      contourHat[i] = outline(m, 2, 1, hex('#29c7e0'));
+    }
+    refreshAllCards(); markSel(); updateFocusUI(); drawPlot(); loop();
+  }
+  for (var i = 0; i < N; i++) {
+    (function (i) {
+      var im = new Image();
+      im.onload = im.onerror = function () { if (++loaded === N) done(); };
+      im.src = 'img/' + (i + 1) + '.png'; imgs[i] = im;
+    })(i);
+  }
+  /* overlay colours are baked once; the theme only changes UI chrome and the viewport */
+})();
+</script>
