@@ -1,5 +1,11 @@
 # Interactive 3D Reconstruction
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![tests](https://github.com/ibipul/3d-reconstruction-ui/actions/workflows/tests.yml/badge.svg)](https://github.com/ibipul/3d-reconstruction-ui/actions/workflows/tests.yml)
+[![Live demo](https://img.shields.io/badge/demo-GitHub_Pages-brightgreen)](https://ibipul.github.io/3d-reconstruction-ui/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
+[![Runs in the browser with Pyodide](https://img.shields.io/badge/runs_in_the_browser-Pyodide-orange)](https://pyodide.org)
+
 Python port of [ibipul/3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab):
 silhouette-based 3D reconstruction by level-set evolution, with user strokes (inside / outside) that
 steer the result. The solver is a port of `loader_wt_control_rec_error_trace.m`.
@@ -42,3 +48,10 @@ PYTHONPATH=src .venv/bin/python scripts/smoke.py 100 30 0.0   # grid, iterations
 
 ## Docs
 - [MATLAB codebase map](docs/matlab-architecture.md) – how the original scripts and functions fit together
+
+## License
+Licensed under the [Apache License, Version 2.0](LICENSE). The MATLAB implementation this is ported from,
+[3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab), is MIT-licensed and
+stays under its own licence.
+
+The two datasets in `web/app/data/` come from that repository.
