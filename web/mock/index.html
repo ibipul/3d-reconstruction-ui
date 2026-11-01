@@ -206,6 +206,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
         <span>strokes</span><b id="s-strokes">0</b>
       </div>
     </div>
+    <p class="note" id="local-note" hidden style="color:var(--mark-out)">Silhouette overlays are off because this page was opened as a local file. Serve the folder instead: <span class="mono">python3 -m http.server</span> in web/mock, then open localhost:8000.</p>
     <p class="note">Mock only. Silhouettes come from a colour threshold on the dataset25 images; the 3D shape and energy curve are simulated.</p>
   </aside>
 </div>
@@ -475,11 +476,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   buildGrid();
   var loaded = 0;
   function done() {
+    var noOverlay = false;
     for (var i = 0; i < N; i++) {
-      var m = buildMask(imgs[i]);
-      contour[i] = outline(m, 0, 0, hex('#f2c230'));
-      contourHat[i] = outline(m, 2, 1, hex('#29c7e0'));
+      var blank = document.createElement('canvas'); blank.width = W; blank.height = H;
+      try {
+        var m = buildMask(imgs[i]);
+        contour[i] = outline(m, 0, 0, hex('#f2c230'));
+        contourHat[i] = outline(m, 2, 1, hex('#29c7e0'));
+      } catch (err) { contour[i] = blank; contourHat[i] = blank; noOverlay = true; }
     }
+    if (noOverlay) $('local-note').hidden = false;
     refreshAllCards(); markSel(); updateFocusUI(); drawPlot(); loop();
   }
   for (var i = 0; i < N; i++) {
