@@ -22,14 +22,15 @@ def test_init_step_snapshot_roundtrip():
     assert [m["iter"] for m in metrics] == [1, 2]
     assert {"energy", "tp", "fp", "fn", "rms", "voxels"} <= set(metrics[0])
 
-    outlines, pts, pts_hat = bridge.snapshot(s)
-    o = np.frombuffer(outlines, np.int32)
+    outlines, mesh, mesh_hat = bridge.snapshot(s)
+    o = np.frombuffer(outlines, np.float32)
     p = 0
-    for _ in range(n):  # n_phi, idx..., n_hat, idx...
-        n1 = o[p]; p += 1 + n1
-        n2 = o[p]; p += 1 + n2
+    for _ in range(n * 2):  # per view: phi then phi_hat: n_seg, then 4 floats per segment
+        k = int(o[p]); p += 1 + 4 * k
     assert p == o.size
-    assert np.frombuffer(pts, np.float32).size % 3 == 0 and len(pts) > 0
+    for blob in (mesh, mesh_hat):
+        nv, nt = np.frombuffer(blob[:8], np.int32)
+        assert nv > 0 and nt > 0 and len(blob) == 8 + nv * 24 + nt * 12
 
 
 def test_noise_is_seeded_and_applied():
@@ -48,3 +49,14 @@ def test_set_strokes_json():
     assert s.views[3]["umask"].max() == 6.0
     bridge.set_strokes(s, 3, "[]")
     assert s.views[3]["umask"].max() == 0.0
+
+
+def test_set_param_changes_smoothing_live():
+    gt, n, rows, cols = _gt_bytes()
+    s = bridge.init_solver(gt, n, rows, cols, 40, 0.0, 0)
+    assert s.cfg.curvature_weight == 0.001
+    bridge.set_param(s, "curvature_weight", 0.25)
+    assert s.cfg.curvature_weight == 0.25
+    import pytest
+    with pytest.raises(ValueError):
+        bridge.set_param(s, "grid", 10)

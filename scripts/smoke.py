@@ -20,3 +20,8 @@ for k in range(iters):
     iou = r["tp"] / max(r["tp"] + r["fp"] + r["fn"], 1)
     print("it %d  %.2fs  E=%.1f rms=%.1f tp=%d fp=%d fn=%d IoU=%.3f voxels=%d" % (
         r["iter"], time.time() - t, r["energy"], r["rms"], r["tp"], r["fp"], r["fn"], iou, (s.phi >= 0).sum()))
+
+import resource
+peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+peak = peak / 1e6 if sys.platform == "darwin" else peak / 1e3   # bytes on macOS, KB on Linux
+print("peak memory: %.2f GB" % (peak / 1e3))

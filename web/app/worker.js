@@ -2,7 +2,7 @@
    Messages in : boot | init | strokes | step
    Messages out: status | booted | init | step | error                              */
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
-const FILES = ['__init__', 'camera', 'levelset', 'silhouette', 'strokes', 'solver', 'data', 'bridge'];
+const FILES = ['__init__', 'camera', 'levelset', 'silhouette', 'strokes', 'surface', 'solver', 'data', 'bridge'];
 let pyodide = null;
 
 function status(text) { postMessage({ type: 'status', text }); }
@@ -27,8 +27,8 @@ async function boot(srcBase) {
 function snapshot(msg) {
   const snap = pyodide.runPython('bridge.snapshot(solver)');
   const parts = snap.toJs(); snap.destroy();
-  msg.outlines = parts[0].buffer; msg.pts = parts[1].buffer; msg.ptsHat = parts[2].buffer;
-  return [msg.outlines, msg.pts, msg.ptsHat];
+  msg.outlines = parts[0].buffer; msg.mesh = parts[1].buffer; msg.meshHat = parts[2].buffer;
+  return [msg.outlines, msg.mesh, msg.meshHat];
 }
 
 self.onmessage = async (e) => {
@@ -49,6 +49,9 @@ self.onmessage = async (e) => {
     } else if (m.cmd === 'strokes') {
       pyodide.globals.set('_v', m.view); pyodide.globals.set('_s', JSON.stringify(m.strokes));
       pyodide.runPython('bridge.set_strokes(solver, _v, _s)');
+    } else if (m.cmd === 'param') {
+      pyodide.globals.set('_pn', m.name); pyodide.globals.set('_pv', m.value);
+      pyodide.runPython('bridge.set_param(solver, _pn, _pv)');
     } else if (m.cmd === 'step') {
       pyodide.globals.set('_k', m.k);
       const t0 = performance.now();

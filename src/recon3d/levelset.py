@@ -75,7 +75,7 @@ def mean_curvature(phi, flat_idx):
     x, y, z = np.unravel_index(flat_idx, phi.shape, order="F")
     xm1, ym1, zm1 = np.maximum(x - 1, 0), np.maximum(y - 1, 0), np.maximum(z - 1, 0)
     xp1, yp1, zp1 = np.minimum(x + 1, dx_ - 1), np.minimum(y + 1, dy_ - 1), np.minimum(z + 1, dz_ - 1)
-    P = lambda a, b, c: phi[a, b, c]
+    P = lambda a, b, c: phi[a, b, c].astype(np.float64)
     c0 = P(x, y, z)
     dx = (P(xm1, y, z) - P(xp1, y, z)) / 2
     dxx = P(xm1, y, z) - 2 * c0 + P(xp1, y, z)
@@ -115,3 +115,83 @@ def signed_distance(mask):
     inside = ndimage.distance_transform_edt(mask)          # = bwdist(1 - mask)
     outside = ndimage.distance_transform_edt(1.0 - mask)   # = bwdist(mask)
     return -(outside - inside + mask)
+
+
+# ----------------------------------------------------------------------------------------
+# Memory-lean variants for large grids (200^3, 300^3). Same results as the full-grid
+# functions above wherever the result matters (near the surface and inside the object).
+# ----------------------------------------------------------------------------------------
+def initial_box_extent(space_length: int, rec_length: int, off_a: int, off_b: int):
+    """Inclusive 0-based voxel ranges (i0, i1, j0, j1, k0, k1) of the initial box, and the volume depth.
+    Same box as `initial_box`."""
+    nb = (space_length - rec_length) // 2
+    start, end = nb, rec_length + nb
+    i0, i1 = start + off_a - 1, end - off_a - 1
+    j0, j1 = start + off_b - 1, end - off_b - 1
+    k0, k1 = nb + 1, nb + 1 + rec_length
+    depth = (nb + 1) + (rec_length + 1) + (nb + 1)
+    return (i0, i1, j0, j1, k0, k1), depth
+
+
+def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, dtype=np.float64, slab: int = 24):
+    """Signed distance of the initial box, computed analytically (no mask volume, no EDT).
+
+    For an axis-aligned box of voxels the Euclidean distance transform has a closed form:
+    outside, the distance to the nearest box voxel is the norm of the per-axis overshoot;
+    inside, the distance to the nearest background voxel is the smallest per-axis distance to a
+    face. This equals `signed_distance(initial_box(...))` exactly, and is built slab by slab so
+    the peak memory stays near the size of the result.
+    """
+    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b)
+    nx = ny = space_length
+    out = np.empty((nx, ny, depth), dtype=dtype, order="F")
+    j = np.arange(ny, dtype=np.float64)[None, :, None]
+    k = np.arange(depth, dtype=np.float64)[None, None, :]
+    oy = np.maximum(np.maximum(j0 - j, j - j1), 0.0)
+    oz = np.maximum(np.maximum(k0 - k, k - k1), 0.0)
+    fy = np.minimum(j - j0 + 1, j1 - j + 1)
+    fz = np.minimum(k - k0 + 1, k1 - k + 1)
+    for s in range(0, nx, slab):
+        i = np.arange(s, min(s + slab, nx), dtype=np.float64)[:, None, None]
+        ox = np.maximum(np.maximum(i0 - i, i - i1), 0.0)
+        fx = np.minimum(i - i0 + 1, i1 - i + 1)
+        outside = np.sqrt(ox * ox + oy * oy + oz * oz)
+        inside = (ox == 0) & (oy == 0) & (oz == 0)
+        depth_in = np.minimum(np.minimum(fx, fy), fz)
+        out[s:s + slab] = np.where(inside, depth_in - 1.0, -outside)
+    return out
+
+
+def get_normals_at(phi, I, J, K):
+    """get_normals for voxels given by 0-based subscripts. Gradients are taken on a crop around
+    the voxels (with a 1-voxel margin, which central differences need), so the cost follows the
+    object, not the whole grid. Same x/y swap as `get_normals`."""
+    lo = np.array([I.min(), J.min(), K.min()])
+    lo = np.maximum(lo - 1, 0)
+    hi = np.minimum(np.array([I.max(), J.max(), K.max()]) + 2, phi.shape)
+    c = phi[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]
+    ii, jj, kk = I - lo[0], J - lo[1], K - lo[2]
+    g0 = np.gradient(c, axis=0)[ii, jj, kk]
+    g1 = np.gradient(c, axis=1)[ii, jj, kk]
+    g2 = np.gradient(c, axis=2)[ii, jj, kk]
+    n = np.stack([g1, g0, g2], axis=1).astype(np.float64)
+    return n / (np.sqrt(np.sum(n * n, axis=1)) + 1e-5)[:, None]
+
+
+def sussman_local(phi, dt, floor=-12.0, margin=2):
+    """`sussman` applied in place on the box around {phi > floor}.
+
+    Re-initialisation only changes the sign-relevant neighbourhood of the surface; voxels deeper
+    than `-floor` outside never come near it, and the sign (which is all that is used there) is
+    preserved. Returns phi."""
+    near = phi > floor
+    if not near.any():
+        return phi
+    sl = []
+    for ax in range(3):
+        other = tuple(a for a in range(3) if a != ax)
+        idx = np.flatnonzero(near.any(axis=other))
+        sl.append(slice(max(idx[0] - margin, 0), min(idx[-1] + margin + 1, phi.shape[ax])))
+    sl = tuple(sl)
+    phi[sl] = sussman(phi[sl].astype(np.float64), dt).astype(phi.dtype)
+    return phi

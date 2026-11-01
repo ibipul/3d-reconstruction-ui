@@ -202,3 +202,72 @@ def test_strokes_steer_phi_hat():
     for _ in range(4):
         a.step(); b.step()
     assert not np.allclose(a.phi_hat, b.phi_hat)
+
+
+# ---------------------------------------------------------------- smooth display outline
+def test_smooth_outline_traces_a_disk_subpixel():
+    from recon3d.silhouette import smooth_outline
+    yy, xx = np.mgrid[:80, :60]
+    mask = (xx - 30.0) ** 2 + (yy - 40.0) ** 2 <= 15.0 ** 2
+    seg = smooth_outline(mask)
+    assert seg.shape[1] == 4 and len(seg) > 60
+    pts = np.concatenate([seg[:, :2], seg[:, 2:]])
+    r = np.hypot(pts[:, 0] - 30.0, pts[:, 1] - 40.0)
+    assert abs(r.mean() - 15.0) < 0.5 and r.std() < 0.3     # smooth: tight around the circle
+    # raw 1-px boundary is much rougher than the smoothed trace
+    raw = mask & ~sil.imerode(mask, np.ones((3, 3), bool))
+    ry, rx = np.nonzero(raw)
+    assert np.hypot(rx - 30.0, ry - 40.0).std() > r.std()
+
+
+def test_smooth_outline_edge_cases():
+    from recon3d.silhouette import smooth_outline
+    assert smooth_outline(np.zeros((20, 20), bool)).shape == (0, 4)
+    full = np.ones((20, 20), bool)
+    assert smooth_outline(full).shape[1] == 4   # touching the border must not crash
+
+
+# ---------------------------------------------------------------- large-grid (memory-lean) paths
+@pytest.mark.parametrize("space,rec,a,b", [(40, 22, 8, 3), (60, 32, 12, 4), (36, 20, 6, 2)])
+def test_analytic_box_sdf_equals_edt(space, rec, a, b):
+    ref = ls.signed_distance(ls.initial_box(space, rec, a, b))
+    got = ls.initial_box_phi(space, rec, a, b, np.float64)
+    assert got.shape == ref.shape and got.flags.f_contiguous
+    assert np.abs(got - ref).max() < 1e-9
+    assert ls.initial_box_phi(space, rec, a, b, np.float32).dtype == np.float32
+
+
+def test_analytic_box_sdf_at_matlab_size():
+    got = ls.initial_box_phi(150, 80, 30, 10)
+    assert got.shape == (150, 150, 153) and (got >= 0).sum() == 21 * 61 * 81
+
+
+def test_cropped_normals_equal_full_normals():
+    rng = np.random.default_rng(3)
+    phi = ndimage.gaussian_filter(rng.standard_normal((30, 28, 26)), 2) * 5
+    idx = np.flatnonzero(phi.ravel(order="F") >= 0)
+    I, J, K = np.unravel_index(idx, phi.shape, order="F")
+    assert np.allclose(ls.get_normals_at(phi, I, J, K), ls.get_normals(phi, idx))
+
+
+def test_local_sussman_matches_full_near_the_surface():
+    phi = ls.signed_distance(ls.initial_box(50, 26, 6, 3))
+    phi = phi * (1 + 0.5 * np.exp(-(phi / 5.0) ** 2))      # perturb away from a true SDF
+    full = ls.sussman(phi.copy(), 0.5)
+    local = ls.sussman_local(phi.copy(), 0.5, floor=-8.0)
+    near = phi > -6
+    assert np.abs(full - local)[near].max() < 1e-9
+    assert (np.sign(full) == np.sign(local)).all()
+
+
+def test_pixel_lookup_matches_intersect1d():
+    rng = np.random.default_rng(5)
+    for _ in range(5):
+        pix = rng.integers(0, 400, 3000)
+        edge = np.unique(rng.integers(0, 400, 120))
+        _, ie_ref, ii_ref = np.intersect1d(edge, pix, return_indices=True)
+        first = np.full(400, -1, dtype=np.int64)
+        first[pix[::-1]] = np.arange(pix.size - 1, -1, -1)
+        ii = first[edge]
+        ie = np.flatnonzero(ii >= 0)
+        assert (ie == ie_ref).all() and (ii[ie] == ii_ref).all()

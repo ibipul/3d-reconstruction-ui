@@ -50,17 +50,30 @@ def step(solver, k):
     return json.dumps(out)
 
 
-def snapshot(solver, max_points=2500):
-    """(outlines, phi points, phi_hat points) as bytes.
+def set_param(solver, name, value):
+    """Change a solver setting while it runs (applies from the next iteration)."""
+    if name not in ("curvature_weight", "sussman_dt", "narrow_band_high"):
+        raise ValueError("unknown parameter: " + name)
+    setattr(solver.cfg, name, float(value))
 
-    outlines is int32: for each view [n_phi, idx..., n_hat, idx...] where idx are
-    column-major flat pixel indices (y + rows * x).
+
+def _mesh_bytes(mesh):
+    verts, normals, tris = mesh
+    head = np.array([len(verts), len(tris)], np.int32)
+    return head.tobytes() + verts.tobytes() + normals.tobytes() + tris.tobytes()
+
+
+def snapshot(solver):
+    """(outlines, mesh, mesh_hat) as bytes.
+
+    outlines is float32: for each view [n_phi, x1 y1 x2 y2 ..., n_hat, ...], smooth sub-pixel
+    segments in pixel-centre coordinates. A mesh is int32 [n_vertices, n_triangles] followed by
+    float32 vertices (n,3), float32 normals (n,3) and uint32 triangles (m,3).
     """
     parts = []
     for v in range(solver.n_views):
-        a, b = solver.outline(v), solver.outline(v, hat=True)
-        parts += [np.array([a.size], np.int32), a, np.array([b.size], np.int32), b]
-    outlines = np.concatenate(parts).astype(np.int32)
-    return (outlines.tobytes(),
-            solver.surface_points(False, max_points).tobytes(),
-            solver.surface_points(True, max_points // 2, seed=1).tobytes())
+        for hat in (False, True):
+            seg = solver.outline_segments(v, hat)
+            parts += [np.array([len(seg)], np.float32), seg.ravel()]
+    outlines = np.concatenate(parts).astype(np.float32)
+    return (outlines.tobytes(), _mesh_bytes(solver.surface_mesh(False)), _mesh_bytes(solver.surface_mesh(True)))

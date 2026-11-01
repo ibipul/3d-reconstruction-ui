@@ -17,6 +17,7 @@ from . import camera as cam
 from . import levelset as ls
 from . import silhouette as sil
 from .strokes import build_umask
+from .surface import surface_mesh
 
 REF_GRID = 150
 TRACE_SQ_DT = 0.5
@@ -81,9 +82,9 @@ class Solver:
         if (space - rec) % 2:
             rec += 1
         off_a, off_b = max(int(round(30 * s)), 1), max(int(round(10 * s)), 1)
-        mask = ls.initial_box(space, rec, off_a, off_b)
-        phi = ls.signed_distance(mask)
-        self.phi = np.asfortranarray(phi)
+        # float32 above the MATLAB size keeps 200^3 / 300^3 within browser memory
+        dtype = np.float64 if cfg.grid <= REF_GRID else np.float32
+        self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype)
         self.phi_hat = self.phi.copy(order="F")
         self.shape = self.phi.shape
         self.voxel_scale = REF_GRID / cfg.grid
@@ -104,8 +105,8 @@ class Solver:
     def _voxels(self, phi):
         pf = phi.ravel(order="F")
         in_pt = np.flatnonzero(pf >= 0)
-        normals = ls.get_normals(-phi, in_pt)
         I, J, K = np.unravel_index(in_pt, self.shape, order="F")
+        normals = -ls.get_normals_at(phi, I, J, K)    # MATLAB: get_normals(-phi, in_pt)
         coords = np.stack([I - self.m[0], J - self.m[1], K - self.m[2], np.ones(in_pt.size)], axis=1)
         coords[:, :3] *= self.voxel_scale
         return in_pt, normals, coords
@@ -225,8 +226,8 @@ class Solver:
         energy = -float((d ** 2).sum())
         ienergy = -float((di ** 2).sum())
         if it % cfg.sussman_every == 1:
-            self.phi = np.asfortranarray(ls.sussman(self.phi, cfg.sussman_dt))
-            self.phi_hat = np.asfortranarray(ls.sussman(self.phi_hat, cfg.sussman_dt))
+            ls.sussman_local(self.phi, cfg.sussman_dt)        # in place, on the box around the object
+            ls.sussman_local(self.phi_hat, cfg.sussman_dt)
 
         out = {"iter": it, "energy": energy, "ienergy": ienergy, "rms": rms, "lyapunov": lya,
                "lyap1": lya1, "lyap2": lya2, "tp": tp, "tn": tn, "fp": fp, "fn": fn}
@@ -240,6 +241,15 @@ class Solver:
         m = self.cache[v]["mask_hat" if hat else "mask"]
         edge = m & ~sil.imerode(m, np.ones((3, 3), bool))
         return np.flatnonzero(edge.ravel(order="F")).astype(np.int32)
+
+    def outline_segments(self, v: int, hat: bool = False, sigma: float = 1.5):
+        """Smooth sub-pixel outline of view v's projected mask, as (n, 4) line segments."""
+        return sil.smooth_outline(self.cache[v]["mask_hat" if hat else "mask"], sigma)
+
+    def surface_mesh(self, hat: bool = False):
+        """Triangle mesh of the zero level set, in the same normalised frame as surface_points."""
+        phi = self.phi_hat if hat else self.phi
+        return surface_mesh(phi, origin=self.m, scale=2.0 / self.cfg.grid)
 
     def surface_points(self, hat: bool = False, max_points: int = 3000, seed: int = 0):
         """Voxels on the zero level set, centred and scaled to roughly [-1, 1]."""

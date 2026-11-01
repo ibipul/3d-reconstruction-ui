@@ -146,8 +146,13 @@ def project_phi_to_image(mask, pixel_idx, camera_loc, coords, normals, nhood, ep
     flat pixel indices, aligned element by element.
     """
     edge = np.flatnonzero(silhouette_band(mask, nhood).ravel(order="F"))
-    _, ie, ii = np.intersect1d(edge, pixel_idx, return_indices=True)  # first occurrences
-    cand = ii
+    # first voxel (lowest index) that projects onto each silhouette pixel; same result as
+    # np.intersect1d(edge, pixel_idx, return_indices=True) but O(n) instead of two sorts
+    first = np.full(mask.size, -1, dtype=np.int64)
+    first[pixel_idx[::-1]] = np.arange(pixel_idx.size - 1, -1, -1)
+    ii = first[edge]
+    ie = np.flatnonzero(ii >= 0)
+    cand = ii[ie]
     if cand.size == 0:
         return cand, edge[ie]
     pts = coords[cand, :3]
@@ -189,3 +194,52 @@ def get_image_stat(img, mask):
         mu_in[0] = float((m * img).sum(dtype=np.float64)) / a_in if a_in else 0.0
         mu_out[0] = float(((1 - m) * img).sum(dtype=np.float64)) / a_out
     return mu_in, mu_out
+
+
+def smooth_outline(mask, sigma=1.5):
+    """Sub-pixel outline of a binary mask as line segments, for display.
+
+    The mask is blurred and its 0.5 level is traced (marching squares), which removes the
+    pixel stair-steps of the raw 1-px boundary. Returns float32 (n, 4): x1, y1, x2, y2 in
+    pixel-centre coordinates (add 0.5 to draw on a canvas).
+    """
+    sl = _crop(mask, int(4 * sigma) + 2)
+    if sl is None:
+        return np.zeros((0, 4), np.float32)
+    f = ndimage.gaussian_filter(mask[sl].astype(float), sigma, mode="nearest") - 0.5
+    S = f > 0
+    R, C = f.shape
+    if R < 2 or C < 2:
+        return np.zeros((0, 4), np.float32)
+    dH = S[:, :-1] != S[:, 1:]                       # horizontal edges (r, c)-(r, c+1)
+    dV = S[:-1, :] != S[1:, :]                       # vertical edges (r, c)-(r+1, c)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        tH = np.where(dH, f[:, :-1] / (f[:, :-1] - f[:, 1:]), 0.0)
+        tV = np.where(dV, f[:-1, :] / (f[:-1, :] - f[1:, :]), 0.0)
+    rr, cc = np.meshgrid(np.arange(R - 1), np.arange(C - 1), indexing="ij")
+    top, bottom = dH[:-1, :], dH[1:, :]
+    left, right = dV[:, :-1], dV[:, 1:]
+    # candidate crossing points per cell, in order top, right, bottom, left
+    px = np.stack([cc + tH[:-1, :], cc + 1.0, cc + tH[1:, :], cc.astype(float)], axis=-1)
+    py = np.stack([rr.astype(float), rr + tV[:, 1:], rr + 1.0, rr + tV[:, :-1]], axis=-1)
+    has = np.stack([top, right, bottom, left], axis=-1)
+    n = has.sum(axis=-1)
+    segs = []
+    two = n == 2
+    if two.any():
+        order = np.argsort(~has[two], axis=1, kind="stable")[:, :2]      # the two crossed edges
+        h2, x2, y2 = has[two], px[two], py[two]
+        i = np.arange(order.shape[0])
+        segs.append(np.stack([x2[i, order[:, 0]], y2[i, order[:, 0]],
+                              x2[i, order[:, 1]], y2[i, order[:, 1]]], axis=1))
+    four = n == 4                                    # saddle: pair top-left and bottom-right
+    if four.any():
+        x4, y4 = px[four], py[four]
+        segs.append(np.stack([x4[:, 0], y4[:, 0], x4[:, 3], y4[:, 3]], axis=1))
+        segs.append(np.stack([x4[:, 2], y4[:, 2], x4[:, 1], y4[:, 1]], axis=1))
+    if not segs:
+        return np.zeros((0, 4), np.float32)
+    out = np.concatenate(segs)
+    out[:, [0, 2]] += sl[1].start
+    out[:, [1, 3]] += sl[0].start
+    return out.astype(np.float32)
