@@ -173,6 +173,14 @@ input[type=range] { accent-color: var(--accent); }
   <label>Seed <input type="number" id="seed" value="0" min="0" step="1"></label>
   <label title="Weight of the mean-curvature (smoothing) term. The MATLAB loader uses 0.001.">Smoothing <input type="range" id="smooth" min="0" max="3.5" step="0.1" value="0"> <span id="smooth-v" class="mono">0.001</span></label>
   <label>Show <select id="src"><option value="photo">Photo</option><option value="input">Solver input</option><option value="gt">Ground truth</option></select></label>
+  <span class="group" role="group" aria-label="Strokes">
+    <span>Strokes</span>
+    <button class="btn mini" id="s-save" type="button" title="Download all strokes, with the iteration each was drawn at, as a JSON file">Save</button>
+    <button class="btn mini" id="s-load" type="button" title="Load a saved strokes file onto the views">Load</button>
+    <button class="btn mini" id="s-replay" type="button" title="Re-initialise with the saved settings and apply every stroke at the iteration it was drawn">Replay</button>
+    <input type="file" id="s-file" accept="application/json,.json" hidden>
+    <span class="mono" id="s-info"></span>
+  </span>
   <span class="note">The solver sees the ground-truth silhouettes plus salt &amp; pepper noise, as in <span class="mono">loader_wt_control_rec_error_trace.m</span> (noise 0.90). Change a setting, then Re-initialise.</span>
 </div>
 
@@ -300,7 +308,7 @@ input[type=range] { accent-color: var(--accent); }
     updateMarked();
   }
   function refreshAll() { for (var i = 0; i < N; i++) refreshCard(i); renderFocus(); }
-  function updateMarked() { var m = 0; for (var i = 0; i < N; i++) if (strokes[i].length) m++; $('s-marked').textContent = m + ' / ' + N; }
+  function updateMarked() { var m = 0, t = 0; for (var i = 0; i < N; i++) { if (strokes[i].length) m++; t += strokes[i].length; } $('s-marked').textContent = m + ' / ' + N + ' · ' + t + ' strokes'; }
 
   /* ---------- focus panel ---------- */
   var fc = $('fc'), fctx = fc.getContext('2d');
@@ -329,6 +337,7 @@ input[type=range] { accent-color: var(--accent); }
     if (cur >= 0) { var c = counts(cur); $('f-counts').textContent = c[0] + ' inside · ' + c[1] + ' outside strokes'; }
     $('brush-v').textContent = brush + ' px';
   }
+  function curIter() { return hist && hist.length ? hist[hist.length - 1].iter : 0; }
   function sendStrokes(v) { if (worker && ready) worker.postMessage({ cmd: 'strokes', view: v, strokes: strokes[v] }); }
   function pt(e) { var r = fc.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
   var drawing = null;
@@ -336,7 +345,7 @@ input[type=range] { accent-color: var(--accent); }
     if (!tool || cur < 0) return;
     fc.setPointerCapture(e.pointerId); var p = pt(e);
     if (tool === 'erase') { drawing = 'erase'; eraseAt(p); return; }
-    drawing = { type: tool, size: brush, pts: [p] }; strokes[cur].push(drawing); renderFocus();
+    drawing = { type: tool, size: brush, iter: curIter(), pts: [p] }; strokes[cur].push(drawing); renderFocus();
   });
   fc.addEventListener('pointermove', function (e) {
     if (!drawing) return; var p = pt(e);
@@ -540,6 +549,7 @@ input[type=range] { accent-color: var(--accent); }
       onSnapshot(m); hist = []; ready = true; busy = false;
       for (var v = 0; v < N; v++) if (strokes[v].length) sendStrokes(v);
       sendSmooth();
+      if (pendingReplay) { pendingReplay = false; applyDue(); setTimeout(function () { if (!running) $('run').click(); }, 0); }
       $('run').disabled = $('step').disabled = $('reset').disabled = false;
       setStatus('Ready · grid ' + $('grid-n').value + '³'); showMetrics(); refreshAll(); drawPlot();
     } else if (m.type === 'step') {
@@ -556,13 +566,13 @@ input[type=range] { accent-color: var(--accent); }
     if (ms) $('r-ms').textContent = Math.round(ms) + ' ms/iter';
     $('s-iou').textContent = seriesValue(r, 'iou').toFixed(3); $('s-fpfn').textContent = r.fp + ' / ' + r.fn; $('s-vox').textContent = r.voxels.toLocaleString('en-US');
   }
-  function requestStep() { if (!ready || busy) return; busy = true; worker.postMessage({ cmd: 'step', k: 1, gen: gen }); }
+  function requestStep() { if (!ready || busy) return; if (replayQueue.length) applyDue(); busy = true; worker.postMessage({ cmd: 'step', k: 1, gen: gen }); }
   function stop() { running = false; $('run').textContent = 'Run'; }
   $('run').onclick = function () { if (running) { stop(); } else { running = true; $('run').textContent = 'Pause'; setStatus('Running…'); requestStep(); } };
   $('step').onclick = function () { if (!running) requestStep(); };
   function maybeInit() {
     if (!booted || !gtGray.length) return;
-    stop(); ready = false; busy = true; gen++; hist = null;
+    stop(); ready = false; busy = true; gen++; hist = null; if (!pendingReplay) { replayQueue = []; replayTotal = 0; }
     $('run').disabled = $('step').disabled = $('reset').disabled = true;
     setStatus('Building the volume…');
     var all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H);
@@ -579,6 +589,88 @@ input[type=range] { accent-color: var(--accent); }
   function sendSmooth() { var w = smoothWeight(); $('smooth-v').textContent = w < 0.01 ? w.toFixed(3) : w.toFixed(2); if (worker && ready) worker.postMessage({ cmd: 'param', name: 'curvature_weight', value: w }); }
   $('smooth').oninput = sendSmooth;
 
+  /* ---------- strokes: save, load, replay ---------- */
+  var replayQueue = [], replayTotal = 0, pendingReplay = false;
+  function allStrokes() {
+    var out = [];
+    for (var v = 0; v < N; v++) strokes[v].forEach(function (st) {
+      out.push({ view: v, type: st.type, size: st.size, iter: st.iter || 0,
+                 pts: st.pts.map(function (p) { return [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]; }) });
+    });
+    return out.sort(function (a, b) { return a.iter - b.iter; });
+  }
+  function exportSession() {
+    return {
+      format: 'recon3d-strokes', version: 1,
+      image: { rows: H, cols: W },
+      settings: { grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, curvature_weight: smoothWeight() },
+      note: 'view is 0-based; pts are [x (column), y (row)] in image pixels; iter is the iteration count when the stroke was drawn; type in = inside (+), out = outside (-)',
+      strokes: allStrokes()
+    };
+  }
+  function importSession(obj) {
+    if (!obj || obj.format !== 'recon3d-strokes' || !Array.isArray(obj.strokes)) throw new Error('Not a recon3d strokes file');
+    var list = obj.strokes.map(function (st, i) {
+      if (!(st.view >= 0 && st.view < N) || (st.type !== 'in' && st.type !== 'out') || !Array.isArray(st.pts) || !st.pts.length)
+        throw new Error('Stroke ' + (i + 1) + ' is not valid');
+      return { view: st.view | 0, type: st.type, size: +st.size || 6, iter: Math.max(0, st.iter | 0),
+               pts: st.pts.map(function (p) { return [+p[0], +p[1]]; }) };
+    });
+    return { settings: obj.settings || null, strokes: list };
+  }
+  function setControl(id, v) { var el = $(id); el.value = v; el.dispatchEvent(new Event('input')); }
+  function applySettings(st) {
+    if (!st) return;
+    if (st.grid) { $('grid-n').value = String(st.grid); }
+    if (st.noise !== undefined) setControl('noise', st.noise);
+    if (st.seed !== undefined) $('seed').value = st.seed;
+    if (st.curvature_weight) { setControl('smooth', Math.max(0, Math.min(3.5, Math.log10(st.curvature_weight) + 3)).toFixed(1)); }
+  }
+  function showInfo(t) { $('s-info').textContent = t; }
+  $('s-save').onclick = function () {
+    var n = allStrokes().length;
+    if (!n) { showInfo('nothing to save yet'); return; }
+    var blob = new Blob([JSON.stringify(exportSession())], { type: 'application/json' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'strokes-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    showInfo('saved ' + n + ' strokes');
+  };
+  $('s-load').onclick = function () { $('s-file').click(); };
+  $('s-file').onchange = function (e) {
+    var f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var sess = importSession(JSON.parse(r.result));
+        for (var v = 0; v < N; v++) strokes[v] = [];
+        sess.strokes.forEach(function (st) { strokes[st.view].push({ type: st.type, size: st.size, iter: st.iter, pts: st.pts }); });
+        applySettings(sess.settings);
+        for (v = 0; v < N; v++) { sendStrokes(v); }
+        refreshAll();
+        showInfo('loaded ' + sess.strokes.length + ' strokes · press Replay to re-run with their settings');
+      } catch (err) { showInfo('could not load: ' + err.message); }
+    };
+    r.readAsText(f);
+  };
+  function applyDue() {
+    var it = curIter(), touched = {};
+    while (replayQueue.length && replayQueue[0].iter <= it) {
+      var st = replayQueue.shift();
+      strokes[st.view].push({ type: st.type, size: st.size, iter: st.iter, pts: st.pts }); touched[st.view] = true;
+    }
+    Object.keys(touched).forEach(function (v) { sendStrokes(+v); refreshCard(+v); });
+    if (replayTotal) showInfo('replay ' + (replayTotal - replayQueue.length) + ' / ' + replayTotal + ' strokes');
+    if (cur >= 0) renderFocus();
+  }
+  $('s-replay').onclick = function () {
+    var list = allStrokes();
+    if (!list.length) { showInfo('no strokes to replay: draw some or load a file'); return; }
+    replayQueue = list.slice(); replayTotal = list.length;
+    for (var v = 0; v < N; v++) strokes[v] = [];      // they come back one by one
+    pendingReplay = true; refreshAll(); maybeInit();
+  };
+
   /* ---------- boot ---------- */
   function loadImg(url) { return new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error('Missing ' + url)); }; im.src = url; }); }
   var jobs = [];
@@ -591,6 +683,7 @@ input[type=range] { accent-color: var(--accent); }
       }));
     })(li);
   }
+  window.reconApp = { exportSession: exportSession, importSession: importSession };
   setStatus('Loading images…');
   Promise.all(jobs).then(function () {
     for (var i = 0; i < N; i++) refreshCard(i);

@@ -8,10 +8,11 @@ steer the result. The solver is a port of `loader_wt_control_rec_error_trace.m`.
 - `src/recon3d/` – the solver (pure NumPy/SciPy; no UI, no file I/O except `data.py`)
   - `camera.py` cameras and projection · `levelset.py` Sussman re-initialisation, normals, curvature
   - `silhouette.py` masks, visibility, image statistics · `strokes.py` user strokes
-  - `solver.py` the iteration loop · `bridge.py` bytes/JSON glue for the web worker
+  - `solver.py` the iteration loop · `surface.py` level-set mesh · `export.py` strokes to masks
+  - `bridge.py` bytes/JSON glue for the web worker
 - `web/app/` – the live browser app (Pyodide in a Web Worker). See [web/app/README.md](web/app/README.md)
 - `web/mock/` – the static layout mock
-- `tests/` – unit tests · `scripts/` – `fetch_data.sh`, `smoke.py` · `docs/` – porting notes
+- `tests/` – unit tests · `scripts/` – `fetch_data.sh`, `smoke.py`, `export_masks.py`, `smoothing_sweep.py` · `docs/` – porting notes
 
 ## Quick start
 
