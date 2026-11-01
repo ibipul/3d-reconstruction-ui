@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Interactive 3D Reconstruction</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -36,6 +38,7 @@
   --phi: #f0c53a; --phi-hat: #3bcbe3; --mark-in: #3ec97e; --mark-out: #f2585f;
   color-scheme: dark;
 }
+[hidden] { display: none !important; }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
@@ -231,7 +234,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     var d = x.getImageData(0, 0, W, H).data, m = new Uint8Array(W * H), i, j;
     for (i = 0; i < W * H; i++) {
       var r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
-      m[i] = (g - b > 12 && g > r + 8) ? 1 : 0;
+      m[i] = ((g - b > 12 && g > r + 8) || (r + g + b < 330 && b < 150)) ? 1 : 0;
     }
     var m2 = new Uint8Array(W * H), y, xx, dx, dy, s;   // 3x3 majority filter
     for (y = 1; y < H - 1; y++) for (xx = 1; xx < W - 1; xx++) {
