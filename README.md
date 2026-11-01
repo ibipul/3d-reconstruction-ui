@@ -1,4 +1,4 @@
-# 3d-reconstruction-ui
+# Interactive 3D Reconstruction
 
 Python port of [ibipul/3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab).
 
