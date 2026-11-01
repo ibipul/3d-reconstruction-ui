@@ -148,7 +148,7 @@ Interaction and reconstruction are **decoupled in time**:
 3. **Replay.** `loader_wt_control_v2.m` loads the bank at `iter==2` and copies it into every `camera_view(k)`. From then on `fu = u_i` is part of the `phi_hat` force, and in v2 the ± split feeds `eu`.
 4. The commented-out blocks inside the loaders (`rem(iter,200)==1` → `interact_to`, `rem(iter,1000)==0` → `erase_from`) show the original live design. Strokes are requested during the run.
 
-**Sign convention needs checking.** `interact_to` is tagged `'o'` and produces negative values. `erase_from` is tagged `'i'` and produces positive values. But `analysis_code_2.m` prints positive sums as "out" and negative sums as "in". In v2, `eu = mask_hat − (H_n − H_p)` treats **negative as inside**. The naming is inconsistent. Settle the convention against real data before porting.
+**Sign convention (resolved).** The force on `phi_hat` is `fu / max|fu|` with `fu = u_i`, and `phi` is positive inside, so **positive = inside (grows the shape), negative = outside (shrinks it)**. That matches the tags: `erase_from` (`'i'`, +3·stroke) and `interact_to` (`'o'`, −stroke). Two places disagree but do not drive the shape: `analysis_code_2.m` prints positive sums as "out" and negative as "in" (labels swapped), and the `eu` term in `_v2` / the trace loader, `eu = mask_hat − (H_n − H_p)`, which only feeds the logged Lyapunov metric. The Python port follows the force (`src/recon3d/strokes.py`).
 
 ## 6. The update rule per view (the heart of the loop)
 
