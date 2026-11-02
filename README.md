@@ -8,7 +8,7 @@
 
 Python port of the original MATLAB code (`3d-reconstruction-ui-matlab`, private):
 silhouette-based 3D reconstruction by level-set evolution, with user strokes (inside / outside) that
-steer the result. The solver is a port of `loader_wt_control_rec_error_trace.m`.
+steer the result.
 
 ## Layout
 - `src/recon3d/` – the solver (pure NumPy/SciPy; no UI, no file I/O except `data.py`)
