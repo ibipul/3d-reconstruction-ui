@@ -7,7 +7,8 @@
 [![Runs in the browser with Pyodide](https://img.shields.io/badge/runs_in_the_browser-Pyodide-orange)](https://pyodide.org)
 
 A variational feedback control framework that guides silhouette-based 3D reconstruction by level-set
-evolution, with user strokes (inside / outside) in the loop, in real time.
+evolution, with user strokes (inside / outside) in the loop, in real time. The original codebase was
+developed in MATLAB during the author's doctoral work and led to the publication [cited below](#how-to-cite).
 
 ## Layout
 - `src/recon3d/` – the solver (pure NumPy/SciPy; no UI, no file I/O except `data.py`)
