@@ -15,7 +15,13 @@ authors:
 repository-code: "https://github.com/ibipul/3d-reconstruction-ui"
 url: "https://ibipul.github.io/3d-reconstruction-ui/"
 license: Apache-2.0
+doi: "10.5281/zenodo.23885285"
 version: 0.1.0
+date-released: "2026-11-02"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23885286"
+    description: "DOI of version 0.1.0 (the doi field above covers all versions)"
 keywords:
   - 3D reconstruction
   - level set
