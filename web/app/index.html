@@ -168,6 +168,7 @@ input[type=range] { accent-color: var(--accent); }
 </header>
 
 <div class="setup">
+  <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt" selected>silhouettes + noise (loader)</option><option value="photo">RGB photos</option></select></label>
   <label>Grid <select id="grid-n"><option value="64">64³</option><option value="100" selected>100³</option><option value="150">150³ (MATLAB)</option><option value="200">200³ (slower)</option><option value="300">300³ (slow, ~1 GB)</option></select></label>
   <label>Noise <input type="range" id="noise" min="0" max="0.95" step="0.05" value="0.9"> <span id="noise-v" class="mono">0.90</span></label>
   <label>Seed <input type="number" id="seed" value="0" min="0" step="1"></label>
@@ -179,10 +180,14 @@ input[type=range] { accent-color: var(--accent); }
     <button class="btn mini" id="s-save" type="button" title="Download all strokes, with the iteration each was drawn at, as a JSON file">Save</button>
     <button class="btn mini" id="s-load" type="button" title="Load a saved strokes file onto the views">Load</button>
     <button class="btn mini" id="s-replay" type="button" title="Re-initialise with the saved settings and apply every stroke at the iteration it was drawn">Replay</button>
+    <select id="s-sample" aria-label="Sample strokes" title="Sample stroke sets for this dataset (data/strokes/)"><option value="">sample strokes…</option></select>
+    <label title="Iteration to plug the sample in at. Empty means now; the sample's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
+    <button class="btn mini" id="s-plug" type="button" title="Add the chosen sample to the views and the running solver">Plug in</button>
+    <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
     <input type="file" id="s-file" accept="application/json,.json" hidden>
     <span class="mono" id="s-info"></span>
   </span>
-  <span class="note">The solver sees the ground-truth silhouettes plus salt &amp; pepper noise, as in <span class="mono">loader_wt_control_rec_error_trace.m</span> (noise 0.90). Change a setting, then Re-initialise.</span>
+  <span class="note">By default the solver sees the ground-truth silhouettes plus salt &amp; pepper noise, as in <span class="mono">loader_wt_control_rec_error_trace.m</span> (noise 0.90); choose RGB photos to run on the colour images. Change a setting, then Re-initialise.</span>
 </div>
 
 <div class="work">
@@ -538,6 +543,21 @@ input[type=range] { accent-color: var(--accent); }
     for (var i = 0; i < W * H; i++) { var v = mapper(bytes[offset + i]); id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255; }
     x.putImageData(id, 0, 0); return c;
   }
+  function rgbCanvas(bytes, offset) {
+    var c = document.createElement('canvas'); c.width = W; c.height = H; var x = c.getContext('2d'), id = x.createImageData(W, H);
+    for (var i = 0; i < W * H; i++) { var o = offset + 3 * i; id.data[i * 4] = bytes[o]; id.data[i * 4 + 1] = bytes[o + 1]; id.data[i * 4 + 2] = bytes[o + 2]; id.data[i * 4 + 3] = 255; }
+    x.putImageData(id, 0, 0); return c;
+  }
+  var photoRGB = null;
+  function photoBytes() {                                  // the colour photos as one n*rows*cols*3 array
+    if (photoRGB) return photoRGB;
+    photoRGB = new Uint8Array(N * W * H * 3);
+    for (var i = 0; i < N; i++) {
+      var d = photo[i].getContext('2d').getImageData(0, 0, W, H).data, o = i * W * H * 3;
+      for (var q = 0; q < W * H; q++) { photoRGB[o + 3 * q] = d[4 * q]; photoRGB[o + 3 * q + 1] = d[4 * q + 1]; photoRGB[o + 3 * q + 2] = d[4 * q + 2]; }
+    }
+    return photoRGB;
+  }
   function onMsg(e) {
     var m = e.data;
     if (m.type === 'status') { setStatus(m.text); return; }
@@ -546,7 +566,7 @@ input[type=range] { accent-color: var(--accent); }
     if (m.gen !== undefined && m.gen !== gen) return;   // reply to a superseded init
     if (m.type === 'init') {
       var inp = new Uint8Array(m.inputs), gts = new Uint8Array(m.gts);
-      for (var i = 0; i < N; i++) { inputC[i] = grayCanvas(inp, i * W * H, function (v) { return v; }); gtC[i] = grayCanvas(gts, i * W * H, function (v) { return v ? 255 : 0; }); }
+      for (var i = 0; i < N; i++) { inputC[i] = m.channels === 3 ? rgbCanvas(inp, i * W * H * 3) : grayCanvas(inp, i * W * H, function (v) { return v; }); gtC[i] = grayCanvas(gts, i * W * H, function (v) { return v ? 255 : 0; }); }
       onSnapshot(m); hist = []; ready = true; busy = false;
       for (var v = 0; v < N; v++) if (strokes[v].length) sendStrokes(v);
       sendSmooth(); sendReinit();
@@ -567,17 +587,19 @@ input[type=range] { accent-color: var(--accent); }
     if (ms) $('r-ms').textContent = Math.round(ms) + ' ms/iter';
     $('s-iou').textContent = seriesValue(r, 'iou').toFixed(3); $('s-fpfn').textContent = r.fp + ' / ' + r.fn; $('s-vox').textContent = r.voxels.toLocaleString('en-US');
   }
-  function requestStep() { if (!ready || busy) return; if (replayQueue.length) applyDue(); busy = true; worker.postMessage({ cmd: 'step', k: 1, gen: gen }); }
+  function requestStep() { if (!ready || busy) return; if (replayQueue.length) applyDue(); if (plugQueue.length) applyPlug(); busy = true; worker.postMessage({ cmd: 'step', k: 1, gen: gen }); }
   function stop() { running = false; $('run').textContent = 'Run'; }
   $('run').onclick = function () { if (running) { stop(); } else { running = true; $('run').textContent = 'Pause'; setStatus('Running…'); requestStep(); } };
   $('step').onclick = function () { if (!running) requestStep(); };
   function maybeInit() {
     if (!booted || !gtGray.length) return;
-    stop(); ready = false; busy = true; gen++; hist = null; if (!pendingReplay) { replayQueue = []; replayTotal = 0; }
+    stop(); ready = false; busy = true; gen++; hist = null; plugQueue = []; if (!pendingReplay) { replayQueue = []; replayTotal = 0; }
     $('run').disabled = $('step').disabled = $('reset').disabled = true;
     setStatus('Building the volume…');
     var all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H);
-    worker.postMessage({ cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value });
+    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value };
+    if ($('source').value === 'photo') msg.photos = photoBytes();
+    worker.postMessage(msg);
   }
   $('reset').onclick = maybeInit;
   $('noise').oninput = function (e) { $('noise-v').textContent = (+e.target.value).toFixed(2); };
@@ -610,7 +632,7 @@ input[type=range] { accent-color: var(--accent); }
     return {
       format: 'recon3d-strokes', version: 1,
       image: { rows: H, cols: W },
-      settings: { grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, curvature_weight: smoothWeight(), reinit_every: +$('reinit-every').value, reinit_dt: +$('reinit-dt').value },
+      settings: { grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, curvature_weight: smoothWeight(), source: $('source').value, reinit_every: +$('reinit-every').value, reinit_dt: +$('reinit-dt').value },
       note: 'view is 0-based; pts are [x (column), y (row)] in image pixels; iter is the iteration count when the stroke was drawn; type in = inside (+), out = outside (-)',
       strokes: allStrokes()
     };
@@ -631,6 +653,7 @@ input[type=range] { accent-color: var(--accent); }
     if (st.grid) { $('grid-n').value = String(st.grid); }
     if (st.noise !== undefined) setControl('noise', st.noise);
     if (st.seed !== undefined) $('seed').value = st.seed;
+    if (st.source && $('source').querySelector('option[value="' + st.source + '"]')) $('source').value = st.source;
     if (st.reinit_every && $('reinit-every').querySelector('option[value="' + st.reinit_every + '"]')) $('reinit-every').value = String(st.reinit_every);
     if (st.reinit_dt && $('reinit-dt').querySelector('option[value="' + st.reinit_dt + '"]')) $('reinit-dt').value = String(st.reinit_dt);
     if (st.curvature_weight) { setControl('smooth', Math.max(0, Math.min(3.5, Math.log10(st.curvature_weight) + 3)).toFixed(1)); }
@@ -680,6 +703,45 @@ input[type=range] { accent-color: var(--accent); }
     pendingReplay = true; refreshAll(); maybeInit();
   };
 
+  /* ---------- sample strokes shipped with the dataset ---------- */
+  var plugQueue = [], samples = [];
+  function loadManifest() {
+    fetch('data/strokes/manifest.json').then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
+      samples = m.samples || [];
+      var sel = $('s-sample');
+      samples.forEach(function (s) {
+        var o = document.createElement('option'); o.value = s.file; o.textContent = s.title + ' (' + s.strokes + ')'; o.title = s.description; sel.appendChild(o);
+      });
+    }).catch(function () { $('s-sample').hidden = $('s-plug').hidden = $('s-at').parentNode.hidden = true; });
+  }
+  function applyPlug() {
+    var it = curIter(), touched = {}, n = 0;
+    while (plugQueue.length && plugQueue[0].iter <= it) {
+      var st = plugQueue.shift(); n++;
+      strokes[st.view].push({ type: st.type, size: st.size, iter: st.iter, pts: st.pts }); touched[st.view] = true;
+    }
+    Object.keys(touched).forEach(function (v) { sendStrokes(+v); refreshCard(+v); });
+    if (cur >= 0) { renderFocus(); updateFocusUI(); }
+    return n;
+  }
+  $('s-plug').onclick = function () {
+    var file = $('s-sample').value;
+    if (!file) { showInfo('choose a sample first'); return; }
+    if (!ready) { showInfo('wait for the solver to be ready'); return; }
+    var at = $('s-at').value, base = at === '' ? curIter() : Math.max(0, parseInt(at, 10) || 0);
+    fetch('data/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
+      var sess = importSession(obj), title = obj.title || file;
+      sess.strokes.forEach(function (st) { plugQueue.push({ view: st.view, type: st.type, size: st.size, iter: base + st.iter, pts: st.pts }); });
+      plugQueue.sort(function (a, b) { return a.iter - b.iter; });
+      var now = applyPlug(), later = plugQueue.length;
+      showInfo('plugged "' + title + '": ' + now + ' strokes now' + (later ? ', ' + later + ' more at iteration ' + plugQueue[0].iter + (plugQueue[later - 1].iter !== plugQueue[0].iter ? ' to ' + plugQueue[later - 1].iter : '') : ''));
+    }).catch(function (err) { showInfo('could not plug in: ' + err.message); });
+  };
+  $('s-clearall').onclick = function () {
+    for (var v = 0; v < N; v++) { strokes[v] = []; sendStrokes(v); }
+    plugQueue = []; replayQueue = []; replayTotal = 0; refreshAll(); showInfo('all strokes cleared');
+  };
+
   /* ---------- boot ---------- */
   function loadImg(url) { return new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error('Missing ' + url)); }; im.src = url; }); }
   var jobs = [];
@@ -693,12 +755,17 @@ input[type=range] { accent-color: var(--accent); }
     })(li);
   }
   window.reconApp = { exportSession: exportSession, importSession: importSession };
+  loadManifest();
   setStatus('Loading images…');
   Promise.all(jobs).then(function () {
     for (var i = 0; i < N; i++) refreshCard(i);
-    worker = new Worker('worker.js'); worker.onmessage = onMsg;
-    worker.onerror = function (e) { setStatus('Worker error: ' + e.message, true); };
-    worker.postMessage({ cmd: 'boot', srcBase: new URL('../../src/recon3d/', location.href).href });
+    // Fetch the worker with revalidation (and start it from a blob), so an updated site is never run with an old cached worker.
+    var srcBase = new URL('../../src/recon3d/', location.href).href;
+    fetch('worker.js', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('worker.js: HTTP ' + r.status); return r.text(); }).then(function (code) {
+      worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))); worker.onmessage = onMsg;
+      worker.onerror = function (e) { setStatus('Worker error: ' + e.message, true); };
+      worker.postMessage({ cmd: 'boot', srcBase: srcBase });
+    }).catch(function (err) { setStatus(err.message, true); });
   }).catch(function (err) { setStatus(err.message + ' (run scripts/fetch_data.sh)', true); });
 })();
 </script>

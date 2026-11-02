@@ -14,8 +14,8 @@ def _gt_bytes(n=36, rows=80, cols=50):
 def test_init_step_snapshot_roundtrip():
     gt, n, rows, cols = _gt_bytes()
     s = bridge.init_solver(gt, n, rows, cols, grid=40, noise=0.0, seed=0)
-    inp, gts = bridge.inputs_bytes(s)
-    assert len(inp) == n * rows * cols and len(gts) == n * rows * cols
+    inp, gts, channels = bridge.inputs_bytes(s)
+    assert channels == 1 and len(inp) == n * rows * cols and len(gts) == n * rows * cols
     assert set(np.unique(np.frombuffer(gts, np.uint8))) <= {0, 1}
 
     metrics = json.loads(bridge.step(s, 2))
@@ -63,3 +63,22 @@ def test_set_param_changes_smoothing_live():
     import pytest
     with pytest.raises(ValueError):
         bridge.set_param(s, "grid", 10)
+
+
+def test_photos_as_solver_input():
+    gt, n, rows, cols = _gt_bytes()
+    photos = np.random.default_rng(1).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8)
+    s = bridge.init_solver(gt, n, rows, cols, 40, 0.0, 0, photos.tobytes())
+    inp, gts, ch = bridge.inputs_bytes(s)
+    assert ch == 3 and len(inp) == n * rows * cols * 3 and len(gts) == n * rows * cols
+    assert (np.frombuffer(inp, np.uint8).reshape(n, rows, cols, 3) == photos).all()
+    metrics = json.loads(bridge.step(s, 2))
+    assert len(metrics) == 2 and all(np.isfinite(m["energy"]) for m in metrics)
+    # the default input is still the silhouettes
+    s2 = bridge.init_solver(gt, n, rows, cols, 40, 0.0, 0)
+    assert bridge.inputs_bytes(s2)[2] == 1
+    # noise hits each channel independently
+    noisy = bridge.init_solver(gt, n, rows, cols, 40, 0.5, 3, photos.tobytes())
+    changed = [(noisy.images[0][:, :, c] != photos[0][:, :, c]) for c in range(3)]
+    assert all(0.4 < c.mean() < 0.6 for c in changed)
+    assert not (changed[0] == changed[1]).all()
