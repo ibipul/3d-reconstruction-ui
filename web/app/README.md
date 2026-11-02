@@ -42,6 +42,16 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
   (36 x 320 x 200, +6 inside, -2 outside), and `... uinput_bank.mat` writes a MATLAB `uinput_bank` struct array with the
   fields of `get_uis.m`, ready for the loaders' injection block.
 
+## Download the 3D model
+
+Under the viewport, **Model** saves the current zero level set as a triangle mesh: pick the shape (the φ reconstruction or the φ̂
+estimate) and the format, then **Download**. OBJ (ASCII, with vertex normals), STL (binary) and PLY (binary, with vertex normals)
+open in Blender, MeshLab, CAD tools and most 3D viewers. The mesh is the full-resolution surface (what you see in the viewport),
+with the triangle winding outward. Units are the world units of the camera setup (camera distance 160), centred on the object
+with z up, so a downloaded model lines up with the camera positions; scale it as you like. The file name carries the grid size and
+the iteration, e.g. `recon-100grid-120it-phi.obj`. The same files can be written from Python with `recon3d.meshio`
+(`Solver.export_mesh()` gives the arrays).
+
 ## Interaction replay
 
 `data/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the

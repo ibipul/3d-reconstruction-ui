@@ -237,6 +237,13 @@ input[type=range] { accent-color: var(--accent); }
         <label><input type="checkbox" id="t-hatmesh"> φ̂ wireframe</label>
         <span class="note">drag to orbit · scroll to zoom</span>
       </div>
+      <div class="legend" style="margin-left:0" role="group" aria-label="Save the 3D model">
+        <span>Model</span>
+        <select id="model-which" aria-label="Which shape"><option value="phi">φ reconstruction</option><option value="hat">φ̂ estimate</option></select>
+        <select id="model-fmt" aria-label="File format"><option value="obj">OBJ</option><option value="stl">STL</option><option value="ply">PLY</option></select>
+        <button class="btn mini" id="model-save" type="button" title="Download the current zero level set as a mesh, in the world units of the camera setup (camera distance 160, z up)" disabled>Download</button>
+        <span class="note" id="model-info"></span>
+      </div>
     </div>
     <div class="panel">
       <h3><span>Trace</span>
@@ -565,6 +572,8 @@ input[type=range] { accent-color: var(--accent); }
     if (m.type === 'status') { setStatus(m.text); return; }
     if (m.type === 'error') { setStatus('Error: ' + m.message, true); busy = false; running = false; $('run').textContent = 'Run'; console.error(m.message); return; }
     if (m.type === 'booted') { booted = true; maybeInit(); return; }
+    if (m.type === 'export') { saveModel(m); return; }
+    if (m.type === 'export-error') { $('model-info').textContent = 'could not export: ' + m.message; return; }
     if (m.gen !== undefined && m.gen !== gen) return;   // reply to a superseded init
     if (m.type === 'init') {
       var inp = new Uint8Array(m.inputs), gts = new Uint8Array(m.gts);
@@ -573,7 +582,7 @@ input[type=range] { accent-color: var(--accent); }
       for (var v = 0; v < N; v++) if (strokes[v].length) sendStrokes(v);
       sendSmooth(); sendReinit();
       if (pendingReplay) { pendingReplay = false; applyDue(); setTimeout(function () { if (!running) $('run').click(); }, 0); }
-      $('run').disabled = $('step').disabled = $('reset').disabled = false;
+      $('run').disabled = $('step').disabled = $('reset').disabled = false; $('model-save').disabled = false;
       setStatus('Ready · grid ' + $('grid-n').value + '³'); showMetrics(); refreshAll(); drawPlot();
     } else if (m.type === 'step') {
       busy = false; m.metrics.forEach(function (r) { hist.push(r); });
@@ -599,7 +608,7 @@ input[type=range] { accent-color: var(--accent); }
   function maybeInit() {
     if (!booted || !gtGray.length) return;
     stop(); ready = false; busy = true; gen++; hist = null; plugQueue = []; if (!pendingReplay) { replayQueue = []; replayTotal = 0; }
-    $('run').disabled = $('step').disabled = $('reset').disabled = true;
+    $('run').disabled = $('step').disabled = $('reset').disabled = true; $('model-save').disabled = true;
     setStatus('Building the volume…');
     var all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H);
     var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value };
@@ -706,6 +715,20 @@ input[type=range] { accent-color: var(--accent); }
     replayQueue = list.slice(); replayTotal = list.length;
     for (var v = 0; v < N; v++) strokes[v] = [];      // they come back one by one
     pendingReplay = true; refreshAll(); maybeInit();
+  };
+
+  /* ---------- download the 3D model ---------- */
+  function saveModel(m) {
+    var name = 'recon-' + $('grid-n').value + 'grid-' + curIter() + 'it-' + (m.hat ? 'phihat' : 'phi') + '.' + m.fmt;
+    var blob = new Blob([m.bytes], { type: 'application/octet-stream' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    $('model-info').textContent = 'saved ' + name + ' (' + (blob.size >= 1e6 ? (blob.size / 1e6).toFixed(1) + ' MB' : Math.round(blob.size / 1e3) + ' KB') + ')';
+  }
+  $('model-save').onclick = function () {
+    if (!(worker && ready)) return;
+    $('model-info').textContent = 'preparing…';
+    worker.postMessage({ cmd: 'export', fmt: $('model-fmt').value, hat: $('model-which').value === 'hat' });
   };
 
   /* ---------- interaction replays shipped with the dataset ---------- */
