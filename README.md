@@ -13,6 +13,9 @@ A **live version** runs in the browser at https://ibipul.github.io/3d-reconstruc
 
 The original codebase was developed in MATLAB during the author's doctoral work and led to the publication [cited below](#how-to-cite).
 
+![The browser app reconstructing the Sentinel drone: camera views 17–24 with user strokes, the live 3D shape, and the Lyapunov trace](docs/screenshot.png)
+<sub>The browser app on the Sentinel drone dataset. Left: camera views 17–24, with the contour in yellow and user strokes marking inside (green) and outside (red). Right: the live 3D shape and the Lyapunov trace; IoU 0.825.</sub>
+
 ## Layout
 - `src/recon3d/` – the solver (pure NumPy/SciPy; no UI, no file I/O except `data.py`)
   - `camera.py` cameras and projection · `levelset.py` Sussman re-initialisation, normals, curvature
