@@ -6,7 +6,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
 [![Runs in the browser with Pyodide](https://img.shields.io/badge/runs_in_the_browser-Pyodide-orange)](https://pyodide.org)
 
-Python port of [ibipul/3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab):
+Python port of the original MATLAB code (`3d-reconstruction-ui-matlab`, private):
 silhouette-based 3D reconstruction by level-set evolution, with user strokes (inside / outside) that
 steer the result. The solver is a port of `loader_wt_control_rec_error_trace.m`.
 
@@ -50,7 +50,7 @@ PYTHONPATH=src .venv/bin/python scripts/smoke.py 100 30 0.0   # grid, iterations
 - [MATLAB codebase map](docs/matlab-architecture.md) – how the original scripts and functions fit together
 
 ## How to cite
-This is a Python port of the MATLAB code ([3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab))
+This is a Python port of the original MATLAB code (`3d-reconstruction-ui-matlab`, private)
 behind the paper below. If you use it, please cite **both** the paper and the software. GitHub's
 **Cite this repository** button (right sidebar) gives the software citation from [CITATION.cff](CITATION.cff).
 
@@ -83,7 +83,7 @@ And the software:
 
 ## License
 Licensed under the [Apache License, Version 2.0](LICENSE). The MATLAB implementation this is ported from,
-[3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab), is the original codebase,
+`3d-reconstruction-ui-matlab` (private), is the original codebase,
 developed by the author during doctoral work.
 
 The two datasets in `web/app/data/` come from that repository.

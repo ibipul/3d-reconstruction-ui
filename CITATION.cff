@@ -4,8 +4,8 @@ type: software
 title: "Interactive 3D Reconstruction"
 abstract: >-
   Silhouette-based 3D reconstruction by level-set evolution, with user strokes
-  (inside / outside) that steer the result. A Python port of the MATLAB code
-  (3d-reconstruction-ui-matlab) behind the paper "An Interactive Control
+  (inside / outside) that steer the result. A Python port of the original (private)
+  MATLAB code behind the paper "An Interactive Control
   Approach to 3D Shape Reconstruction" (ACC 2020). Runs natively or in the
   browser through Pyodide.
 authors:
