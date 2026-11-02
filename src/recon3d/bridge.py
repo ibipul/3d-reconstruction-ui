@@ -8,6 +8,7 @@ import json
 
 import numpy as np
 
+from . import meshio
 from .data import gt_mask_from_gray
 from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
@@ -73,6 +74,17 @@ def _mesh_bytes(mesh):
     verts, normals, tris = mesh
     head = np.array([len(verts), len(tris)], np.int32)
     return head.tobytes() + verts.tobytes() + normals.tobytes() + tris.tobytes()
+
+
+def export_model(solver, fmt, hat=False):
+    """The current shape as an OBJ, STL or PLY file (bytes), in world units (see Solver.export_mesh)."""
+    verts, normals, tris = meshio.drop_degenerate(*solver.export_mesh(bool(hat)))
+    if len(tris) == 0:
+        raise ValueError("there is nothing to export: the shape has no surface")
+    comment = ("recon3d reconstruction (%s) after %d iterations, grid %d\n"
+               "units: world units of the camera setup (camera distance 160), centred on the object, z up\n"
+               "%d vertices, %d triangles" % ("phi_hat" if hat else "phi", solver.iter, solver.cfg.grid, len(verts), len(tris)))
+    return meshio.write(fmt, verts, normals, tris, comment)
 
 
 def snapshot(solver):

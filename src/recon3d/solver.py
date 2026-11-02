@@ -264,6 +264,12 @@ class Solver:
         phi = self.phi_hat if hat else self.phi
         return surface_mesh(phi, origin=self.m, scale=2.0 / self.cfg.grid)
 
+    def export_mesh(self, hat: bool = False):
+        """The zero level set as (vertices, normals, triangles) in world units: the units of the camera
+        positions (camera distance 160), centred on the object, z up. Full resolution, as in the viewer."""
+        phi = self.phi_hat if hat else self.phi
+        return surface_mesh(phi, origin=self.m, scale=self.voxel_scale)
+
     def surface_points(self, hat: bool = False, max_points: int = 3000, seed: int = 0):
         """Voxels on the zero level set, centred and scaled to roughly [-1, 1]."""
         phi = self.phi_hat if hat else self.phi
