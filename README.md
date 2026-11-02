@@ -1,5 +1,6 @@
 # Interactive 3D Reconstruction
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23885285.svg)](https://doi.org/10.5281/zenodo.23885285)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![tests](https://github.com/ibipul/3d-reconstruction-ui/actions/workflows/tests.yml/badge.svg)](https://github.com/ibipul/3d-reconstruction-ui/actions/workflows/tests.yml)
 [![Live demo](https://img.shields.io/badge/demo-GitHub_Pages-brightgreen)](https://ibipul.github.io/3d-reconstruction-ui/)
@@ -50,6 +51,9 @@ And the software:
   author    = {Islam, Bipul},
   title     = {Interactive {3D} Reconstruction},
   version   = {0.1.0},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.23885285},
   url       = {https://github.com/ibipul/3d-reconstruction-ui}
 }
 ```
