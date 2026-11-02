@@ -6,9 +6,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
 [![Runs in the browser with Pyodide](https://img.shields.io/badge/runs_in_the_browser-Pyodide-orange)](https://pyodide.org)
 
-Python port of the original MATLAB code (`3d-reconstruction-ui-matlab`, private):
-silhouette-based 3D reconstruction by level-set evolution, with user strokes (inside / outside) that
-steer the result.
+A variational feedback control framework that guides silhouette-based 3D reconstruction by level-set
+evolution, with user strokes (inside / outside) in the loop, in real time. A live version runs in the browser at
+https://ibipul.github.io/3d-reconstruction-ui/. The original codebase was
+developed in MATLAB during the author's doctoral work and led to the publication [cited below](#how-to-cite).
 
 ## Layout
 - `src/recon3d/` – the solver (pure NumPy/SciPy; no UI, no file I/O except `data.py`)
@@ -22,32 +23,6 @@ steer the result.
 
 ## Live app
 https://ibipul.github.io/3d-reconstruction-ui/ (GitHub Pages; the first load downloads Pyodide, NumPy and SciPy, about 30 MB)
-
-## Quick start
-
-```sh
-python3 -m venv .venv && .venv/bin/pip install numpy scipy pytest pillow
-PYTHONPATH=src .venv/bin/python -m pytest -q tests
-
-# the web app (the two datasets are committed in web/app/data/; scripts/fetch_data.sh refreshes them)
-python3 -m http.server 8000      # then open http://localhost:8000/web/app/
-
-# or run the solver natively and print metrics
-PYTHONPATH=src .venv/bin/python scripts/smoke.py 100 30 0.0   # grid, iterations, noise
-```
-
-## Status
-- Ported: cameras, level-set machinery, silhouette extraction and visibility, the update rule,
-  metrics (energy, RMS error, TP/TN/FP/FN, Lyapunov terms), user strokes.
-- **Not yet verified against MATLAB.** The tests check invariants (e.g. the fast morphology equals
-  scipy's, shift and projection conventions, sphere curvature). Parity with MATLAB output needs
-  fixtures from a MATLAB run, and one known approximation: `strel('disk', 6)` is modelled as an
-  octagon (R=3 and R=4 match MATLAB's neighbourhoods; R=6 is unconfirmed).
-- The grid size is configurable (default 100³; MATLAB uses 150³), so results differ from MATLAB's
-  unless run at 150.
-
-## Docs
-- [MATLAB codebase map](docs/matlab-architecture.md) – how the original scripts and functions fit together
 
 ## How to cite
 This is a Python port of the original MATLAB code (`3d-reconstruction-ui-matlab`, private)
@@ -80,6 +55,32 @@ And the software:
   url       = {https://github.com/ibipul/3d-reconstruction-ui}
 }
 ```
+
+## Quick start
+
+```sh
+python3 -m venv .venv && .venv/bin/pip install numpy scipy pytest pillow
+PYTHONPATH=src .venv/bin/python -m pytest -q tests
+
+# the web app (the two datasets are committed in web/app/data/; scripts/fetch_data.sh refreshes them)
+python3 -m http.server 8000      # then open http://localhost:8000/web/app/
+
+# or run the solver natively and print metrics
+PYTHONPATH=src .venv/bin/python scripts/smoke.py 100 30 0.0   # grid, iterations, noise
+```
+
+## Status
+- Ported: cameras, level-set machinery, silhouette extraction and visibility, the update rule,
+  metrics (energy, RMS error, TP/TN/FP/FN, Lyapunov terms), user strokes.
+- **Not yet verified against MATLAB.** The tests check invariants (e.g. the fast morphology equals
+  scipy's, shift and projection conventions, sphere curvature). Parity with MATLAB output needs
+  fixtures from a MATLAB run, and one known approximation: `strel('disk', 6)` is modelled as an
+  octagon (R=3 and R=4 match MATLAB's neighbourhoods; R=6 is unconfirmed).
+- The grid size is configurable (default 100³; MATLAB uses 150³), so results differ from MATLAB's
+  unless run at 150.
+
+## Docs
+- [MATLAB codebase map](docs/matlab-architecture.md) – how the original scripts and functions fit together
 
 ## License
 Licensed under the [Apache License, Version 2.0](LICENSE). The MATLAB implementation this is ported from,
