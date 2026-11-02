@@ -2,7 +2,7 @@
    Messages in : boot | init | strokes | step
    Messages out: status | booted | init | step | error                              */
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
-const FILES = ['__init__', 'camera', 'levelset', 'silhouette', 'strokes', 'surface', 'solver', 'data', 'bridge'];
+const FILES = ['__init__', 'camera', 'levelset', 'silhouette', 'strokes', 'surface', 'meshio', 'export', 'solver', 'data', 'bridge'];
 let pyodide = null;
 
 function status(text) { postMessage({ type: 'status', text }); }
@@ -50,6 +50,15 @@ self.onmessage = async (e) => {
     } else if (m.cmd === 'strokes') {
       pyodide.globals.set('_v', m.view); pyodide.globals.set('_s', JSON.stringify(m.strokes));
       pyodide.runPython('bridge.set_strokes(solver, _v, _s)');
+    } else if (m.cmd === 'export') {
+      // the current shape as an OBJ / STL / PLY file; a failure here (e.g. nothing to export) must not stop the run
+      try {
+        pyodide.globals.set('_fmt', m.fmt); pyodide.globals.set('_hat', !!m.hat);
+        const r = pyodide.runPython('bridge.export_model(solver, _fmt, _hat)'); const bytes = r.toJs(); r.destroy();
+        postMessage({ type: 'export', fmt: m.fmt, hat: !!m.hat, bytes: bytes.buffer }, [bytes.buffer]);
+      } catch (err) {
+        postMessage({ type: 'export-error', message: String(err && err.message ? err.message : err).split('\n').slice(-2, -1)[0] || 'export failed' });
+      }
     } else if (m.cmd === 'param') {
       pyodide.globals.set('_pn', m.name); pyodide.globals.set('_pv', m.value);
       pyodide.runPython('bridge.set_param(solver, _pn, _pv)');

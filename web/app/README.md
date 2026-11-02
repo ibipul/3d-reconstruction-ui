@@ -42,6 +42,16 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
   (36 x 320 x 200, +6 inside, -2 outside), and `... uinput_bank.mat` writes a MATLAB `uinput_bank` struct array with the
   fields of `get_uis.m`, ready for the loaders' injection block.
 
+## Download the 3D model
+
+Under the viewport, **Model** saves the current zero level set as a triangle mesh: pick the shape (the φ reconstruction or the φ̂
+estimate) and the format, then **Download**. OBJ (ASCII, with vertex normals), STL (binary) and PLY (binary, with vertex normals)
+open in Blender, MeshLab, CAD tools and most 3D viewers. The mesh is the full-resolution surface (what you see in the viewport),
+with the triangle winding outward. Units are the world units of the camera setup (camera distance 160), centred on the object
+with z up, so a downloaded model lines up with the camera positions; scale it as you like. The file name carries the grid size and
+the iteration, e.g. `recon-100grid-120it-phi.obj`. The same files can be written from Python with `recon3d.meshio`
+(`Solver.export_mesh()` gives the arrays).
+
 ## Interaction replay
 
 `data/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the
@@ -83,7 +93,7 @@ the run did not collapse on its own and the strokes changed little (IoU 0.806 to
 |---|---|---|
 | Input | silhouettes + noise | What the solver sees. *silhouettes + noise* is what `loader_wt_control_rec_error_trace.m` does (the ground-truth masks with salt & pepper noise). *RGB photos* runs on the colour images, using the three-channel branch of the MATLAB loaders: the image force and the energy are summed over R, G and B, and the inside/outside means are taken per channel (zero pixels are ignored, as in `get_image_stat.m`). Noise, if set, is applied to each channel independently. The ground-truth masks are still used for IoU and the error metrics. |
 | Grid | 100³ | The MATLAB code uses 150³. 64³ is fast; 200³ and 300³ are slower (about 1 s and 3 s per iteration natively; the browser is a bit slower) and need roughly 0.6 GB and 1 GB. The camera geometry is the same at every size (voxels are rescaled). |
-| Smoothing | 0.001 | Weight of the mean-curvature term (the MATLAB loader's value). Values around 0.1 to 1 smooth more; above about 3 the shape collapses. Applies from the next iteration, no re-initialise needed. |
+| Smoothing | 0.001 | Weight of the mean-curvature term (the MATLAB loader's value). The default is very weak. In a clean 64³ run of 60 iterations (every 10 / step 0.05), raising it from 0.001 to 1 made the surface about a quarter smoother (roughness 6.1 to 4.7) and raised IoU from 0.814 to 0.853; at 3 it over-smoothed (IoU 0.75), and much higher values collapse the shape. Applies from the next iteration, no re-initialise needed. |
 | Re-init | every 5, step 0.5 | How often the level set is re-initialised (Sussman) and how big each correction is. The loader's schedule makes the shape pulse every 5 iterations, because each re-initialisation moves the surface; a smaller step (0.05 to 0.1) and a longer interval (10 to 20) remove the pulsing. Applies from the next iteration. |
 | Noise | 0.90 | `imnoise(gt, 'salt & pepper', 0.90)`, as in the loader. At 0 the carving converges visibly within tens of iterations. |
 | Seed | 0 | Noise random seed. |
