@@ -52,9 +52,9 @@ def step(solver, k):
 
 def set_param(solver, name, value):
     """Change a solver setting while it runs (applies from the next iteration)."""
-    if name not in ("curvature_weight", "sussman_dt", "narrow_band_high"):
+    if name not in ("curvature_weight", "sussman_dt", "sussman_every", "narrow_band_high"):
         raise ValueError("unknown parameter: " + name)
-    setattr(solver.cfg, name, float(value))
+    setattr(solver.cfg, name, int(value) if name == "sussman_every" else float(value))
 
 
 def _mesh_bytes(mesh):

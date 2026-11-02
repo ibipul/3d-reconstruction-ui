@@ -48,6 +48,7 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 |---|---|---|
 | Grid | 100³ | The MATLAB code uses 150³. 64³ is fast; 200³ and 300³ are slower (about 1 s and 3 s per iteration natively; the browser is a bit slower) and need roughly 0.6 GB and 1 GB. The camera geometry is the same at every size (voxels are rescaled). |
 | Smoothing | 0.001 | Weight of the mean-curvature term (the MATLAB loader's value). Values around 0.1 to 1 smooth more; above about 3 the shape collapses. Applies from the next iteration, no re-initialise needed. |
+| Re-init | every 5, step 0.5 | How often the level set is re-initialised (Sussman) and how big each correction is. The loader's schedule makes the shape pulse every 5 iterations, because each re-initialisation moves the surface; a smaller step (0.05 to 0.1) and a longer interval (10 to 20) remove the pulsing. Applies from the next iteration. |
 | Noise | 0.90 | `imnoise(gt, 'salt & pepper', 0.90)`, as in the loader. At 0 the carving converges visibly within tens of iterations. |
 | Seed | 0 | Noise random seed. |
 
