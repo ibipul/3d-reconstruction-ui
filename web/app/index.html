@@ -179,11 +179,12 @@ input[type=range] { accent-color: var(--accent); }
     <span>Strokes</span>
     <button class="btn mini" id="s-save" type="button" title="Download all strokes, with the iteration each was drawn at, as a JSON file">Save</button>
     <button class="btn mini" id="s-load" type="button" title="Load a saved strokes file onto the views">Load</button>
-    <button class="btn mini" id="s-replay" type="button" title="Re-initialise with the saved settings and apply every stroke at the iteration it was drawn">Replay</button>
-    <select id="s-sample" aria-label="Sample strokes" title="Sample stroke sets for this dataset (data/strokes/)"><option value="">sample strokes…</option></select>
-    <label title="Iteration to plug the sample in at. Empty means now; the sample's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
+    <button class="btn mini" id="s-replay" type="button" title="Re-initialise and re-apply your current strokes at the iterations they were drawn at">Re-run</button>
+    <select id="s-sample" aria-label="Interaction replay" title="Interaction replays recorded for this dataset (data/strokes/)"><option value="">interaction replay…</option></select>
+    <label title="Iteration to plug the interaction replay in at. Empty means now; the replay's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
     <label title="Apply every stroke immediately instead of at the iteration it was drawn at. Timing recorded on one grid size does not carry over exactly to another, so this is the safe choice for a different grid."><input type="checkbox" id="s-once"> all at once</label>
-    <button class="btn mini" id="s-plug" type="button" title="Add the chosen sample to the views and the running solver">Plug in</button>
+    <button class="btn mini" id="s-plug" type="button" title="Add the chosen interaction replay to the current run">Plug in</button>
+    <button class="btn mini" id="s-play" type="button" title="Re-initialise with the settings the replay was recorded with (input, smoothing, re-init schedule; your grid is kept) and play it from the start">Play</button>
     <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
     <input type="file" id="s-file" accept="application/json,.json" hidden>
     <span class="mono" id="s-info"></span>
@@ -707,7 +708,7 @@ input[type=range] { accent-color: var(--accent); }
     pendingReplay = true; refreshAll(); maybeInit();
   };
 
-  /* ---------- sample strokes shipped with the dataset ---------- */
+  /* ---------- interaction replays shipped with the dataset ---------- */
   var plugQueue = [], samples = [];
   function loadManifest() {
     fetch('data/strokes/manifest.json').then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
@@ -730,7 +731,7 @@ input[type=range] { accent-color: var(--accent); }
   }
   $('s-plug').onclick = function () {
     var file = $('s-sample').value;
-    if (!file) { showInfo('choose a sample first'); return; }
+    if (!file) { showInfo('choose an interaction replay first'); return; }
     if (!ready) { showInfo('wait for the solver to be ready'); return; }
     var at = $('s-at').value, base = at === '' ? curIter() : Math.max(0, parseInt(at, 10) || 0);
     fetch('data/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
@@ -741,6 +742,23 @@ input[type=range] { accent-color: var(--accent); }
       var now = applyPlug(), later = plugQueue.length;
       showInfo('plugged "' + title + '": ' + now + ' strokes now' + (later ? ', ' + later + ' more at iteration ' + plugQueue[0].iter + (plugQueue[later - 1].iter !== plugQueue[0].iter ? ' to ' + plugQueue[later - 1].iter : '') : ''));
     }).catch(function (err) { showInfo('could not plug in: ' + err.message); });
+  };
+  $('s-play').onclick = function () {
+    var file = $('s-sample').value;
+    if (!file) { showInfo('choose an interaction replay first'); return; }
+    if (!booted) { showInfo('wait for the solver to start'); return; }
+    fetch('data/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
+      var meta = samples.filter(function (x) { return x.file === file; })[0] || {};
+      var sess = importSession(obj), title = meta.title || obj.title || file;
+      var settings = sess.settings ? JSON.parse(JSON.stringify(sess.settings)) : null, recordedGrid = settings && settings.grid;
+      if (settings) delete settings.grid;                    // keep the grid you chose: recorded grids can be much heavier
+      applySettings(settings);
+      for (var v = 0; v < N; v++) strokes[v] = [];
+      plugQueue = [];
+      replayQueue = sess.strokes.slice().sort(function (a, b) { return a.iter - b.iter; }); replayTotal = replayQueue.length;
+      pendingReplay = true; refreshAll(); maybeInit();
+      showInfo('playing "' + title + '" with its recorded settings' + (recordedGrid ? ' (recorded at ' + recordedGrid + '³, your grid kept)' : ''));
+    }).catch(function (err) { showInfo('could not play: ' + err.message); });
   };
   $('s-clearall').onclick = function () {
     for (var v = 0; v < N; v++) { strokes[v] = []; sendStrokes(v); }

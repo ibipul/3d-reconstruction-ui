@@ -42,32 +42,40 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
   (36 x 320 x 200, +6 inside, -2 outside), and `... uinput_bank.mat` writes a MATLAB `uinput_bank` struct array with the
   fields of `get_uis.m`, ready for the loaders' injection block.
 
-## Sample strokes for the dataset
+## Interaction replay
 
-`data/strokes/` holds the sample stroke set for this dataset, `manifest.json` lists it, and it is preselected in the
-**Strokes** row: a hand-drawn session on `dataset25` (the sentinel), 209 strokes on 35 of the 36 views. Press **Plug in**
-to add it to the views and feed it to the solver. Type an iteration in **at** to plug it in later (empty = now), and tick
-**all at once** to apply every stroke immediately instead of at the iteration it was drawn at. **Clear all** removes every
-stroke. Plugged strokes are saved and replayed like hand-drawn ones. To add another sample, drop a saved strokes file into
-`data/strokes/` and add it to `manifest.json`.
+`data/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the
+**Strokes** row): a hand-drawn session on `dataset25` (the sentinel), 290 strokes (95 inside, 195 outside) on all 36 views, 177 of
+them at the start and 113 more between iterations 152 and 1099. It was recorded with the **RGB photos** as input, smoothing 0.398
+and the loader's re-initialisation (every 5, step 0.5), at grid 300.
 
-Strokes are in image pixels, so a session recorded at one grid size (this one: 300³) plugs into a run at any other. The
-timing does not carry over exactly, though: a coarser grid evolves faster per iteration, and not by a fixed ratio (in a
-test, a 3x coarser run was at the fine run's iteration 6 to 12 at the same state for the first few iterations and then
-raced ahead), so there is no automatic rescale. Use the recorded timing, or **all at once**.
+- **Play** re-initialises with the settings the replay was recorded with (input, smoothing, re-init schedule; **your grid is kept**,
+  since the recorded 300³ is heavy), then plays it from the start: the opening strokes appear at once and the others at the
+  iterations they were drawn at. Press nothing else; it starts running. The full timeline is 1099 iterations (about 7 minutes at 100³).
+- **Plug in** adds the replay to the run you already have, without touching your settings. Type an iteration in **at** to plug it in
+  later (empty = now). Tick **all at once** to apply every stroke immediately instead of at its recorded iteration.
+- **Clear all** removes every stroke. **Re-run** (next to Save and Load) re-initialises and re-applies *your own* strokes at the
+  iterations you drew them at. Plugged and played strokes are saved and re-run like hand-drawn ones.
 
-What it does depends on the setup. At 64³, over 400 iterations (the session's whole timeline), on this dataset (IoU against the
-ground truth, higher is better):
+To add another replay, save a session from the app (**Save**), drop the file into `data/strokes/` and list it in `manifest.json`.
 
-| Run | No strokes | Plugged as recorded | All at once |
+Strokes are in image pixels, so a replay recorded at one grid size plugs into a run at any other. The timing does not carry over
+exactly, though: a coarser grid evolves faster per iteration, and not by a fixed ratio (in a test, a 3x coarser run matched the fine
+run's state for the first few iterations and then raced ahead), so there is no automatic rescale. Use the recorded timing, or **all at once**.
+
+What it does, under the settings it was recorded with (RGB photos, smoothing 0.398, every 5 / step 0.5), at 64³ over 1100 iterations
+(voxels left and IoU against the ground truth; higher IoU is better):
+
+| Iteration | No strokes | Plugged as recorded | All at once |
 |---|---|---|---|
-| Clean silhouettes, loader schedule | 0.137 | 0.783 | 0.794 |
-| Clean silhouettes, every 10 / step 0.05 | 0.806 | 0.809 | 0.810 |
-| Noise 0.90, loader schedule | shape vanishes | 0.673 | 0.701 |
-| Noise 0.90, every 10 / step 0.05 | 0.169 | 0.610 | 0.607 |
+| 50 | 111 voxels, 0.208 | 412 voxels, 0.736 | 395 voxels, 0.726 |
+| 150 | 9 voxels, 0.013 | 427 voxels, 0.726 | 414 voxels, 0.722 |
+| 600 | 6 voxels, 0.009 | 423 voxels, 0.722 | 403 voxels, 0.752 |
+| 1100 | 6 voxels, 0.009 | 407 voxels, 0.731 | 396 voxels, 0.726 |
 
-Under the loader's schedule the strokes stop the shape collapsing (with 90% noise and no strokes it shrinks away entirely, and
-the app stops with a message); on an already well-behaved run (clean data, smooth schedule) they change little.
+With these settings the shape collapses without the strokes (the loader's re-initialisation schedule shrinks it away), and the strokes
+hold it at a steady shape. I have not measured this replay under a gentler schedule. With an earlier recorded session, on clean data with every 10 / step 0.05,
+the run did not collapse on its own and the strokes changed little (IoU 0.806 to 0.809).
 
 ## Settings
 
