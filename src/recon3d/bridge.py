@@ -12,28 +12,34 @@ from .data import gt_mask_from_gray
 from .solver import Config, Solver, imnoise_salt_pepper
 
 
-def init_solver(gray_bytes, n, rows, cols, grid, noise, seed):
-    """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major).
+def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None):
+    """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
+    and, by default, as the solver's input.
 
-    As in loader_wt_control_rec_error_trace.m, the solver's observed image is the ground
-    truth plus salt & pepper noise of density `noise`; the closed binary mask is for metrics.
+    As in loader_wt_control_rec_error_trace.m, the observed image is the ground truth plus salt &
+    pepper noise of density `noise`. If `photo_bytes` (n * rows * cols * 3 uint8 RGB) is given, the
+    solver runs on the photos instead, on all three channels (the `length(size(img))==3` branch of
+    the MATLAB loaders); noise is then applied to each channel independently.
     """
     g = np.frombuffer(bytes(gray_bytes), dtype=np.uint8).reshape(n, rows, cols)
     rng = np.random.default_rng(int(seed))
-    images, masks = [], []
-    for i in range(n):
-        masks.append(gt_mask_from_gray(g[i]))
-        images.append(imnoise_salt_pepper(g[i], float(noise), rng) if noise > 0 else g[i].copy())
+    masks = [gt_mask_from_gray(g[i]) for i in range(n)]
+    if photo_bytes is not None:
+        src = np.frombuffer(bytes(photo_bytes), dtype=np.uint8).reshape(n, rows, cols, 3)
+    else:
+        src = g
+    images = [imnoise_salt_pepper(src[i], float(noise), rng) if noise > 0 else src[i].copy() for i in range(n)]
     solver = Solver(images, masks, Config(grid=int(grid)))
     solver._bridge_masks = masks
     return solver
 
 
 def inputs_bytes(solver):
-    """(observed images, ground-truth masks) as uint8 bytes, shape (n, rows, cols)."""
+    """(observed images, ground-truth masks, channels). Images are uint8, shape (n, rows, cols) or
+    (n, rows, cols, 3); masks are 0/1, shape (n, rows, cols)."""
     imgs = np.stack(solver.images).astype(np.uint8)
     gts = np.stack(solver._bridge_masks).astype(np.uint8)
-    return imgs.tobytes(), gts.tobytes()
+    return imgs.tobytes(), gts.tobytes(), (3 if imgs.ndim == 4 else 1)
 
 
 def set_strokes(solver, view, strokes_json):

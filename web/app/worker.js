@@ -16,7 +16,7 @@ async function boot(srcBase) {
   status('Loading solver code…');
   pyodide.FS.mkdirTree('/home/pyodide/recon3d');
   for (const f of FILES) {
-    const r = await fetch(srcBase + f + '.py');
+    const r = await fetch(srcBase + f + '.py', { cache: 'no-cache' });   // revalidate: never run stale solver code
     if (!r.ok) throw new Error('Could not load ' + f + '.py (' + r.status + ')');
     pyodide.FS.writeFile('/home/pyodide/recon3d/' + f + '.py', await r.text());
   }
@@ -41,9 +41,10 @@ self.onmessage = async (e) => {
       const g = pyodide.globals;
       g.set('_gt', m.gt); g.set('_n', m.n); g.set('_rows', m.rows); g.set('_cols', m.cols);
       g.set('_grid', m.grid); g.set('_noise', m.noise); g.set('_seed', m.seed);
-      pyodide.runPython('solver = bridge.init_solver(_gt.to_py(), _n, _rows, _cols, _grid, _noise, _seed)');
-      const io = pyodide.runPython('bridge.inputs_bytes(solver)'); const [inp, gts] = io.toJs(); io.destroy();
-      const out = { type: 'init', gen: m.gen, inputs: inp.buffer, gts: gts.buffer };
+      g.set('_photo', m.photos || undefined);   // RGB photos, or undefined to run on the silhouettes
+      pyodide.runPython('solver = bridge.init_solver(_gt.to_py(), _n, _rows, _cols, _grid, _noise, _seed, _photo.to_py() if _photo is not None else None)');
+      const io = pyodide.runPython('bridge.inputs_bytes(solver)'); const [inp, gts, ch] = io.toJs(); io.destroy();
+      const out = { type: 'init', gen: m.gen, channels: ch, inputs: inp.buffer, gts: gts.buffer };
       const tr = snapshot(out);
       postMessage(out, [out.inputs, out.gts, ...tr]);
     } else if (m.cmd === 'strokes') {

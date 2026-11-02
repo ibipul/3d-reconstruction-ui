@@ -271,3 +271,32 @@ def test_pixel_lookup_matches_intersect1d():
         ii = first[edge]
         ie = np.flatnonzero(ii >= 0)
         assert (ie == ie_ref).all() and (ii[ie] == ii_ref).all()
+
+
+# ---------------------------------------------------------------- three-channel (RGB) images
+def test_rgb_with_identical_channels_matches_grayscale():
+    """The solver's RGB branch (the `length(size(img))==3` block in the MATLAB loaders) sums the
+    force and the energy over R, G, B. With three identical channels and no zero pixels (the RGB
+    statistics ignore zeros, the grayscale ones do not) the evolution must be identical and the
+    energy exactly three times larger."""
+    rng = np.random.default_rng(2)
+    gt = np.zeros((80, 50)); gt[20:60, 15:35] = 1
+    gray = (60 + 120 * gt + rng.integers(0, 30, gt.shape)).astype(np.uint8)       # no zeros anywhere
+    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0))
+    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0))
+    for _ in range(5):
+        ra, rb = a.step(), b.step()
+        assert np.isclose(rb["energy"], 3 * ra["energy"], rtol=1e-9)
+        assert (ra["tp"], ra["fp"], ra["fn"]) == (rb["tp"], rb["fp"], rb["fn"])
+    # not bit-identical: the "+ 1e-5" stabilisers in MATLAB's normalisations are not scale-invariant
+    assert np.abs(a.phi - b.phi).max() < 1e-3
+
+
+def test_rgb_channels_are_weighted_independently():
+    from recon3d.silhouette import get_image_stat
+    img = np.zeros((10, 10, 3), np.uint8)
+    img[..., 0], img[..., 1], img[..., 2] = 100, 150, 200
+    mask = np.zeros((10, 10), bool); mask[2:6, 2:6] = True
+    mi, mo = get_image_stat(img, mask)
+    assert (mi == [100, 150, 200]).all() and (mo == [100, 150, 200]).all()

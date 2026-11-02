@@ -20,8 +20,8 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 
 ## What you see
 
-- **Grid:** the 36 views. *Show* switches between the photo, what the solver sees (ground-truth
-  silhouette plus salt & pepper noise), and the ground truth. Yellow outlines are the projected
+- **Grid:** the 36 views. *Show* switches between the photo, what the solver sees (the *Input* setting:
+  silhouettes plus noise, or the photos), and the ground truth. Yellow outlines are the projected
   reconstruction φ, cyan the estimate φ̂.
 - **Click a card** to focus it. Pick **Inside** or **Outside** and draw. Strokes are sent to the
   solver and steer φ̂ from the next iteration (positive = inside, negative = outside, as in
@@ -42,10 +42,32 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
   (36 x 320 x 200, +6 inside, -2 outside), and `... uinput_bank.mat` writes a MATLAB `uinput_bank` struct array with the
   fields of `get_uis.m`, ready for the loaders' injection block.
 
+## Sample strokes for the dataset
+
+`data/strokes/` holds ready-made stroke sets for this dataset (`manifest.json` lists them): background markers (outside),
+object-core markers (inside), both, and a staged one (outside first, inside 10 iterations later). Pick one in the
+**Strokes** row, optionally type the iteration to plug it in at (empty = now), and press **Plug in**. The strokes appear on
+the views and are fed to the solver, so you can start a run, let it settle, and plug a sample in when you want. A sample's
+own timing is added to the iteration you choose; **Clear all** removes every stroke. Plugged strokes are saved and
+replayed like hand-drawn ones.
+
+They are generated from the ground-truth silhouettes the way a careful user would draw them (inside strokes along the
+object's long axes, at least 4 px from its edge; outside strokes across clear background, at least 14 px away):
+`python scripts/make_sample_strokes.py`. What they do depends on the setup, at 64³ after 60 iterations (IoU, higher is better):
+
+| Run | No strokes | Background markers | Core markers | Both |
+|---|---|---|---|---|
+| Silhouettes + noise 0.90, loader schedule | 0.355 | 0.463 | 0.357 | 0.482 |
+| Clean silhouettes, loader schedule | 0.215 | 0.268 | 0.592 | 0.580 |
+| Clean silhouettes, every 10 / step 0.05 | 0.814 | 0.822 | 0.814 | 0.822 |
+
+Under the loader's schedule the core markers stop the shape collapsing; on an already well-behaved run they change little.
+
 ## Settings
 
 | Setting | Default | Notes |
 |---|---|---|
+| Input | silhouettes + noise | What the solver sees. *silhouettes + noise* is what `loader_wt_control_rec_error_trace.m` does (the ground-truth masks with salt & pepper noise). *RGB photos* runs on the colour images, using the three-channel branch of the MATLAB loaders: the image force and the energy are summed over R, G and B, and the inside/outside means are taken per channel (zero pixels are ignored, as in `get_image_stat.m`). Noise, if set, is applied to each channel independently. The ground-truth masks are still used for IoU and the error metrics. |
 | Grid | 100³ | The MATLAB code uses 150³. 64³ is fast; 200³ and 300³ are slower (about 1 s and 3 s per iteration natively; the browser is a bit slower) and need roughly 0.6 GB and 1 GB. The camera geometry is the same at every size (voxels are rescaled). |
 | Smoothing | 0.001 | Weight of the mean-curvature term (the MATLAB loader's value). Values around 0.1 to 1 smooth more; above about 3 the shape collapses. Applies from the next iteration, no re-initialise needed. |
 | Re-init | every 5, step 0.5 | How often the level set is re-initialised (Sussman) and how big each correction is. The loader's schedule makes the shape pulse every 5 iterations, because each re-initialisation moves the surface; a smaller step (0.05 to 0.1) and a longer interval (10 to 20) remove the pulsing. Applies from the next iteration. |
