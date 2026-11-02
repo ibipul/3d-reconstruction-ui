@@ -56,8 +56,8 @@ self.onmessage = async (e) => {
     } else if (m.cmd === 'step') {
       pyodide.globals.set('_k', m.k);
       const t0 = performance.now();
-      const metrics = JSON.parse(pyodide.runPython('bridge.step(solver, _k)'));
-      const out = { type: 'step', gen: m.gen, metrics, ms: performance.now() - t0 };
+      const res = JSON.parse(pyodide.runPython('bridge.step(solver, _k)'));
+      const out = { type: 'step', gen: m.gen, metrics: res.metrics, collapsed: res.collapsed, ms: performance.now() - t0 };
       const tr = snapshot(out);
       postMessage(out, tr);
     }

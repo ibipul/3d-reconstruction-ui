@@ -44,24 +44,30 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 
 ## Sample strokes for the dataset
 
-`data/strokes/` holds ready-made stroke sets for this dataset (`manifest.json` lists them): background markers (outside),
-object-core markers (inside), both, and a staged one (outside first, inside 10 iterations later). Pick one in the
-**Strokes** row, optionally type the iteration to plug it in at (empty = now), and press **Plug in**. The strokes appear on
-the views and are fed to the solver, so you can start a run, let it settle, and plug a sample in when you want. A sample's
-own timing is added to the iteration you choose; **Clear all** removes every stroke. Plugged strokes are saved and
-replayed like hand-drawn ones.
+`data/strokes/` holds the sample stroke set for this dataset, `manifest.json` lists it, and it is preselected in the
+**Strokes** row: a hand-drawn session on `dataset25` (the sentinel), 209 strokes on 35 of the 36 views. Press **Plug in**
+to add it to the views and feed it to the solver. Type an iteration in **at** to plug it in later (empty = now), and tick
+**all at once** to apply every stroke immediately instead of at the iteration it was drawn at. **Clear all** removes every
+stroke. Plugged strokes are saved and replayed like hand-drawn ones. To add another sample, drop a saved strokes file into
+`data/strokes/` and add it to `manifest.json`.
 
-They are generated from the ground-truth silhouettes the way a careful user would draw them (inside strokes along the
-object's long axes, at least 4 px from its edge; outside strokes across clear background, at least 14 px away):
-`python scripts/make_sample_strokes.py`. What they do depends on the setup, at 64³ after 60 iterations (IoU, higher is better):
+Strokes are in image pixels, so a session recorded at one grid size (this one: 300³) plugs into a run at any other. The
+timing does not carry over exactly, though: a coarser grid evolves faster per iteration, and not by a fixed ratio (in a
+test, a 3x coarser run was at the fine run's iteration 6 to 12 at the same state for the first few iterations and then
+raced ahead), so there is no automatic rescale. Use the recorded timing, or **all at once**.
 
-| Run | No strokes | Background markers | Core markers | Both |
-|---|---|---|---|---|
-| Silhouettes + noise 0.90, loader schedule | 0.355 | 0.463 | 0.357 | 0.482 |
-| Clean silhouettes, loader schedule | 0.215 | 0.268 | 0.592 | 0.580 |
-| Clean silhouettes, every 10 / step 0.05 | 0.814 | 0.822 | 0.814 | 0.822 |
+What it does depends on the setup. At 64³, over 400 iterations (the session's whole timeline), on this dataset (IoU against the
+ground truth, higher is better):
 
-Under the loader's schedule the core markers stop the shape collapsing; on an already well-behaved run they change little.
+| Run | No strokes | Plugged as recorded | All at once |
+|---|---|---|---|
+| Clean silhouettes, loader schedule | 0.137 | 0.783 | 0.794 |
+| Clean silhouettes, every 10 / step 0.05 | 0.806 | 0.809 | 0.810 |
+| Noise 0.90, loader schedule | shape vanishes | 0.673 | 0.701 |
+| Noise 0.90, every 10 / step 0.05 | 0.169 | 0.610 | 0.607 |
+
+Under the loader's schedule the strokes stop the shape collapsing (with 90% noise and no strokes it shrinks away entirely, and
+the app stops with a message); on an already well-behaved run (clean data, smooth schedule) they change little.
 
 ## Settings
 

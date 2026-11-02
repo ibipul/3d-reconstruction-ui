@@ -182,6 +182,7 @@ input[type=range] { accent-color: var(--accent); }
     <button class="btn mini" id="s-replay" type="button" title="Re-initialise with the saved settings and apply every stroke at the iteration it was drawn">Replay</button>
     <select id="s-sample" aria-label="Sample strokes" title="Sample stroke sets for this dataset (data/strokes/)"><option value="">sample strokes…</option></select>
     <label title="Iteration to plug the sample in at. Empty means now; the sample's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
+    <label title="Apply every stroke immediately instead of at the iteration it was drawn at. Timing recorded on one grid size does not carry over exactly to another, so this is the safe choice for a different grid."><input type="checkbox" id="s-once"> all at once</label>
     <button class="btn mini" id="s-plug" type="button" title="Add the chosen sample to the views and the running solver">Plug in</button>
     <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
     <input type="file" id="s-file" accept="application/json,.json" hidden>
@@ -576,6 +577,9 @@ input[type=range] { accent-color: var(--accent); }
     } else if (m.type === 'step') {
       busy = false; m.metrics.forEach(function (r) { hist.push(r); });
       onSnapshot(m); showMetrics(m.ms); refreshAll(); drawPlot();
+      if (m.collapsed) {                                  // the shape shrank away completely: stop and say so
+        stop(); setStatus('Stopped: ' + m.collapsed + '. Re-initialise, or try a gentler schedule or add strokes.', true); return;
+      }
       setStatus(running ? 'Running…' : 'Ready · grid ' + $('grid-n').value + '³');
       if (running) requestStep();
     }
@@ -710,7 +714,7 @@ input[type=range] { accent-color: var(--accent); }
       samples = m.samples || [];
       var sel = $('s-sample');
       samples.forEach(function (s) {
-        var o = document.createElement('option'); o.value = s.file; o.textContent = s.title + ' (' + s.strokes + ')'; o.title = s.description; sel.appendChild(o);
+        var o = document.createElement('option'); o.value = s.file; o.textContent = s.title + ' (' + s.strokes + ')'; o.title = s.description; if (s.default) o.selected = true; sel.appendChild(o);
       });
     }).catch(function () { $('s-sample').hidden = $('s-plug').hidden = $('s-at').parentNode.hidden = true; });
   }
@@ -730,8 +734,9 @@ input[type=range] { accent-color: var(--accent); }
     if (!ready) { showInfo('wait for the solver to be ready'); return; }
     var at = $('s-at').value, base = at === '' ? curIter() : Math.max(0, parseInt(at, 10) || 0);
     fetch('data/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
-      var sess = importSession(obj), title = obj.title || file;
-      sess.strokes.forEach(function (st) { plugQueue.push({ view: st.view, type: st.type, size: st.size, iter: base + st.iter, pts: st.pts }); });
+      var meta = samples.filter(function (x) { return x.file === file; })[0] || {};
+      var sess = importSession(obj), title = meta.title || obj.title || file;
+      sess.strokes.forEach(function (st) { plugQueue.push({ view: st.view, type: st.type, size: st.size, iter: base + ($('s-once').checked ? 0 : st.iter), pts: st.pts }); });
       plugQueue.sort(function (a, b) { return a.iter - b.iter; });
       var now = applyPlug(), later = plugQueue.length;
       showInfo('plugged "' + title + '": ' + now + ' strokes now' + (later ? ', ' + later + ' more at iteration ' + plugQueue[0].iter + (plugQueue[later - 1].iter !== plugQueue[0].iter ? ' to ' + plugQueue[later - 1].iter : '') : ''));

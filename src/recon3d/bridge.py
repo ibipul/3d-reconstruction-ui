@@ -9,7 +9,7 @@ import json
 import numpy as np
 
 from .data import gt_mask_from_gray
-from .solver import Config, Solver, imnoise_salt_pepper
+from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
 def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None):
@@ -47,13 +47,19 @@ def set_strokes(solver, view, strokes_json):
 
 
 def step(solver, k):
-    """Run k iterations; returns JSON list of per-iteration metrics."""
-    out = []
+    """Run k iterations. Returns JSON {"metrics": [per-iteration dicts], "collapsed": null or a message}.
+
+    If a level set loses its whole interior the run stops and `collapsed` says so, instead of failing."""
+    out, collapsed = [], None
     for _ in range(int(k)):
-        r = solver.step()
+        try:
+            r = solver.step()
+        except ShapeCollapsed as e:
+            collapsed = str(e)
+            break
         r["voxels"] = int((solver.phi >= 0).sum())
         out.append(r)
-    return json.dumps(out)
+    return json.dumps({"metrics": out, "collapsed": collapsed})
 
 
 def set_param(solver, name, value):

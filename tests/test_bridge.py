@@ -18,8 +18,9 @@ def test_init_step_snapshot_roundtrip():
     assert channels == 1 and len(inp) == n * rows * cols and len(gts) == n * rows * cols
     assert set(np.unique(np.frombuffer(gts, np.uint8))) <= {0, 1}
 
-    metrics = json.loads(bridge.step(s, 2))
-    assert [m["iter"] for m in metrics] == [1, 2]
+    res = json.loads(bridge.step(s, 2))
+    metrics = res["metrics"]
+    assert res["collapsed"] is None and [m["iter"] for m in metrics] == [1, 2]
     assert {"energy", "tp", "fp", "fn", "rms", "voxels"} <= set(metrics[0])
 
     outlines, mesh, mesh_hat = bridge.snapshot(s)
@@ -72,7 +73,7 @@ def test_photos_as_solver_input():
     inp, gts, ch = bridge.inputs_bytes(s)
     assert ch == 3 and len(inp) == n * rows * cols * 3 and len(gts) == n * rows * cols
     assert (np.frombuffer(inp, np.uint8).reshape(n, rows, cols, 3) == photos).all()
-    metrics = json.loads(bridge.step(s, 2))
+    metrics = json.loads(bridge.step(s, 2))["metrics"]
     assert len(metrics) == 2 and all(np.isfinite(m["energy"]) for m in metrics)
     # the default input is still the silhouettes
     s2 = bridge.init_solver(gt, n, rows, cols, 40, 0.0, 0)
@@ -82,3 +83,16 @@ def test_photos_as_solver_input():
     changed = [(noisy.images[0][:, :, c] != photos[0][:, :, c]) for c in range(3)]
     assert all(0.4 < c.mean() < 0.6 for c in changed)
     assert not (changed[0] == changed[1]).all()
+
+
+def test_a_vanished_shape_is_reported_not_raised():
+    gt, n, rows, cols = _gt_bytes()
+    s = bridge.init_solver(gt, n, rows, cols, 40, 0.0, 0)
+    json.loads(bridge.step(s, 1))
+    s.phi[...] = -1.0                                  # nothing is inside any more
+    res = json.loads(bridge.step(s, 3))
+    assert res["metrics"] == [] and "no interior left" in res["collapsed"]
+    s2 = bridge.init_solver(gt, n, rows, cols, 40, 0.0, 0)
+    json.loads(bridge.step(s2, 1))
+    s2.phi_hat[...] = -1.0                             # the estimate vanishing is reported too
+    assert "phi_hat" in json.loads(bridge.step(s2, 2))["collapsed"]
