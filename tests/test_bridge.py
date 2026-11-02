@@ -57,6 +57,9 @@ def test_set_param_changes_smoothing_live():
     assert s.cfg.curvature_weight == 0.001
     bridge.set_param(s, "curvature_weight", 0.25)
     assert s.cfg.curvature_weight == 0.25
+    bridge.set_param(s, "sussman_every", 10.0)
+    bridge.set_param(s, "sussman_dt", 0.05)
+    assert s.cfg.sussman_every == 10 and isinstance(s.cfg.sussman_every, int) and s.cfg.sussman_dt == 0.05
     import pytest
     with pytest.raises(ValueError):
         bridge.set_param(s, "grid", 10)
