@@ -83,7 +83,7 @@ And the software:
 
 ## License
 Licensed under the [Apache License, Version 2.0](LICENSE). The MATLAB implementation this is ported from,
-[3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab), is MIT-licensed and
-stays under its own licence.
+[3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab), is the original codebase,
+developed by the author during doctoral work.
 
 The two datasets in `web/app/data/` come from that repository.
