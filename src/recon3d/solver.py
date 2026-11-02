@@ -20,6 +20,17 @@ from .strokes import build_umask
 from .surface import surface_mesh
 
 REF_GRID = 150
+
+
+class ShapeCollapsed(RuntimeError):
+    """A level set has no interior left (phi >= 0 nowhere), so there is nothing to project.
+
+    Happens when the evolution shrinks the shape away, e.g. with very strong smoothing or a long run
+    on heavily noisy input. `which` is 'phi' or 'phi_hat'."""
+
+    def __init__(self, which, iteration):
+        super().__init__("the %s level set has no interior left at iteration %d" % (which, iteration))
+        self.which, self.iteration = which, iteration
 TRACE_SQ_DT = 0.5
 
 
@@ -102,9 +113,11 @@ class Solver:
         self.project_all()
 
     # ------------------------------------------------------------------ geometry
-    def _voxels(self, phi):
+    def _voxels(self, phi, which="phi"):
         pf = phi.ravel(order="F")
         in_pt = np.flatnonzero(pf >= 0)
+        if in_pt.size == 0:
+            raise ShapeCollapsed(which, self.iter)
         I, J, K = np.unravel_index(in_pt, self.shape, order="F")
         normals = -ls.get_normals_at(phi, I, J, K)    # MATLAB: get_normals(-phi, in_pt)
         coords = np.stack([I - self.m[0], J - self.m[1], K - self.m[2], np.ones(in_pt.size)], axis=1)
@@ -115,7 +128,7 @@ class Solver:
         """Pass 1 of each iteration: project both shapes into every view."""
         cfg = self.cfg
         self.in_pt, self.normals, self.coords = self._voxels(self.phi)
-        self.in_pt_hat, self.normals_hat, self.coords_hat = self._voxels(self.phi_hat)
+        self.in_pt_hat, self.normals_hat, self.coords_hat = self._voxels(self.phi_hat, "phi_hat")
         in_sum = np.zeros(3); out_sum = np.zeros(3)
         iin_sum = np.zeros(3); iout_sum = np.zeros(3)
         for v, view in enumerate(self.views):

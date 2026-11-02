@@ -1,34 +1,12 @@
 {
- "dataset": "sentinel",
- "note": "Plug these into the web app's Strokes panel. iter in each file is an offset.",
+ "dataset": "dataset25 photos / dataset_sentinel_gt (sentinel)",
  "samples": [
   {
-   "file": "sentinel-outside.json",
-   "title": "Background markers",
-   "description": "Outside strokes across clear background in every view, applied immediately.",
-   "strokes": 180,
-   "bytes": 61251
-  },
-  {
-   "file": "sentinel-inside.json",
-   "title": "Object core markers",
-   "description": "Inside strokes along the long axes of the object in every view, applied immediately.",
-   "strokes": 65,
-   "bytes": 17523
-  },
-  {
-   "file": "sentinel-both.json",
-   "title": "Inside and outside markers",
-   "description": "Both sets, applied immediately.",
-   "strokes": 245,
-   "bytes": 78304
-  },
-  {
-   "file": "sentinel-staged.json",
-   "title": "Staged guidance",
-   "description": "Outside strokes first, then the inside strokes 10 iterations later.",
-   "strokes": 245,
-   "bytes": 78394
+   "file": "dataset25-sentinel-strokes-2026-11-02T06-46-44.json",
+   "title": "dataset25 sentinel: hand-drawn session",
+   "description": "209 strokes (95 inside, 114 outside) on 35 of 36 views, drawn over the first 372 iterations of a run at grid 300, noise 0, smoothing 0.01. Plugged in with its recorded timing, or all at once.",
+   "strokes": 209,
+   "default": true
   }
  ]
 }
