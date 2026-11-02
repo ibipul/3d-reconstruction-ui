@@ -7,9 +7,10 @@
 [![Runs in the browser with Pyodide](https://img.shields.io/badge/runs_in_the_browser-Pyodide-orange)](https://pyodide.org)
 
 A variational feedback control framework that guides silhouette-based 3D reconstruction by level-set
-evolution, with user strokes (inside / outside) in the loop, in real time. A live version runs in the browser at
-https://ibipul.github.io/3d-reconstruction-ui/. The original codebase was
-developed in MATLAB during the author's doctoral work and led to the publication [cited below](#how-to-cite).
+evolution, with user strokes (inside / outside) in the loop, in real time. 
+A **live version** runs in the browser at https://ibipul.github.io/3d-reconstruction-ui/. 
+
+The original codebase was developed in MATLAB during the author's doctoral work and led to the publication [cited below](#how-to-cite).
 
 ## Layout
 - `src/recon3d/` – the solver (pure NumPy/SciPy; no UI, no file I/O except `data.py`)
@@ -20,9 +21,6 @@ developed in MATLAB during the author's doctoral work and led to the publication
 - `web/app/` – the live browser app (Pyodide in a Web Worker). See [web/app/README.md](web/app/README.md)
 - `web/mock/` – the static layout mock
 - `tests/` – unit tests · `scripts/` – `fetch_data.sh`, `smoke.py`, `export_masks.py`, `smoothing_sweep.py` · `docs/` – porting notes
-
-## Live app
-https://ibipul.github.io/3d-reconstruction-ui/ (GitHub Pages; the first load downloads Pyodide, NumPy and SciPy, about 30 MB)
 
 ## How to cite
 This is a Python port of the original MATLAB code (`3d-reconstruction-ui-matlab`, private)
