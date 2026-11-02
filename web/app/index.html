@@ -168,13 +168,13 @@ input[type=range] { accent-color: var(--accent); }
 </header>
 
 <div class="setup">
-  <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt" selected>silhouettes + noise (loader)</option><option value="photo">RGB photos</option></select></label>
-  <label>Grid <select id="grid-n"><option value="64">64³</option><option value="100" selected>100³</option><option value="150">150³ (MATLAB)</option><option value="200">200³ (slower)</option><option value="300">300³ (slow, ~1 GB)</option></select></label>
-  <label>Noise <input type="range" id="noise" min="0" max="0.95" step="0.05" value="0.9"> <span id="noise-v" class="mono">0.90</span></label>
+  <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt">silhouettes + noise (loader)</option><option value="photo" selected>RGB photos</option></select></label>
+  <label>Grid <select id="grid-n"><option value="64">64³</option><option value="100">100³</option><option value="150" selected>150³ (MATLAB)</option><option value="200">200³ (slower)</option><option value="300">300³ (slow, ~1 GB)</option></select></label>
+  <label>Noise <input type="range" id="noise" min="0" max="0.95" step="0.05" value="0"> <span id="noise-v" class="mono">0.00</span></label>
   <label>Seed <input type="number" id="seed" value="0" min="0" step="1"></label>
-  <label title="Weight of the mean-curvature (smoothing) term. The MATLAB loader uses 0.001.">Smoothing <input type="range" id="smooth" min="0" max="3.5" step="0.1" value="0"> <span id="smooth-v" class="mono">0.001</span></label>
-  <label title="How often the level set is re-initialised to a distance function (Sussman), and the size of each correction. The MATLAB loader uses every 5 iterations with step 0.5; that schedule makes the shape pulse. Every 10 with step 0.05 is smooth.">Re-init <select id="reinit-every" aria-label="Re-initialise every N iterations"><option value="1">every 1</option><option value="2">every 2</option><option value="5" selected>every 5 (loader)</option><option value="10">every 10</option><option value="20">every 20</option><option value="50">every 50</option><option value="1000000000">never</option></select> <select id="reinit-dt" aria-label="Re-initialisation step"><option value="0.5" selected>step 0.5 (loader)</option><option value="0.25">step 0.25</option><option value="0.1">step 0.1</option><option value="0.05">step 0.05</option></select></label>
-  <label>Show <select id="src"><option value="photo">Photo</option><option value="input">Solver input</option><option value="gt">Ground truth</option></select></label>
+  <label title="Weight of the mean-curvature (smoothing) term. The MATLAB loader uses 0.001; this page starts at 0.04.">Smoothing <input type="range" id="smooth" min="0" max="3.5" step="any" value="1.60206"> <span id="smooth-v" class="mono">0.04</span></label>
+  <label title="How often the level set is re-initialised to a distance function (Sussman), and the size of each correction. The MATLAB loader uses every 5 iterations with step 0.5; that schedule makes the shape pulse. Every 10 with step 0.05 is smooth.">Re-init <select id="reinit-every" aria-label="Re-initialise every N iterations"><option value="1">every 1</option><option value="2">every 2</option><option value="5" selected>every 5 (loader)</option><option value="10">every 10</option><option value="20">every 20</option><option value="50">every 50</option><option value="1000000000">never</option></select> <select id="reinit-dt" aria-label="Re-initialisation step"><option value="0.5">step 0.5 (loader)</option><option value="0.25" selected>step 0.25</option><option value="0.1">step 0.1</option><option value="0.05">step 0.05</option></select></label>
+  <label>Show <select id="src"><option value="photo">Photo</option><option value="input" selected>Solver input</option><option value="gt">Ground truth</option></select></label>
   <span class="group" role="group" aria-label="Strokes">
     <span>Strokes</span>
     <button class="btn mini" id="s-save" type="button" title="Download all strokes, with the iteration each was drawn at, as a JSON file">Save</button>
@@ -182,14 +182,14 @@ input[type=range] { accent-color: var(--accent); }
     <button class="btn mini" id="s-replay" type="button" title="Re-initialise and re-apply your current strokes at the iterations they were drawn at">Re-run</button>
     <select id="s-sample" aria-label="Interaction replay" title="Interaction replays recorded for this dataset (data/strokes/)"><option value="">interaction replay…</option></select>
     <label title="Iteration to plug the interaction replay in at. Empty means now; the replay's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
-    <label title="Apply every stroke immediately instead of at the iteration it was drawn at. Timing recorded on one grid size does not carry over exactly to another, so this is the safe choice for a different grid."><input type="checkbox" id="s-once"> all at once</label>
+    <label title="Apply every stroke immediately instead of at the iteration it was drawn at. Timing recorded on one grid size does not carry over exactly to another, so this is the safe choice for a different grid."><input type="checkbox" id="s-once" checked> all at once</label>
     <button class="btn mini" id="s-plug" type="button" title="Add the chosen interaction replay to the current run">Plug in</button>
     <button class="btn mini" id="s-play" type="button" title="Re-initialise with the settings the replay was recorded with (input, smoothing, re-init schedule; your grid is kept) and play it from the start">Play</button>
     <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
     <input type="file" id="s-file" accept="application/json,.json" hidden>
     <span class="mono" id="s-info"></span>
   </span>
-  <span class="note">By default the solver sees the ground-truth silhouettes plus salt &amp; pepper noise, as in <span class="mono">loader_wt_control_rec_error_trace.m</span> (noise 0.90); choose RGB photos to run on the colour images. Change a setting, then Re-initialise.</span>
+  <span class="note">Starts on the RGB photos with no noise (grid 150, smoothing 0.04, re-init every 5 / step 0.25). The MATLAB trace loader instead runs on the ground-truth silhouettes with noise 0.90, smoothing 0.001 and re-init every 5 / step 0.5; choose those to match it. Change a setting, then Re-initialise.</span>
 </div>
 
 <div class="work">
@@ -272,7 +272,7 @@ input[type=range] { accent-color: var(--accent); }
   var strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
   var outPhi = [], outHat = [];
   var mesh = null, meshHat = null;
-  var hist = null, tool = null, brush = 6, cur = -1, sel = -1, srcMode = 'photo';
+  var hist = null, tool = null, brush = 6, cur = -1, sel = -1, srcMode = 'input';
   var showPhi = true, showHat = true, showCams = true, showHatMesh = false;
   var worker = null, booted = false, ready = false, busy = false, running = false, gen = 0;
   var cardCanvas = [], cardMarks = [], cardEl = [];

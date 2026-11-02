@@ -79,14 +79,16 @@ the run did not collapse on its own and the strokes changed little (IoU 0.806 to
 
 ## Settings
 
-| Setting | Default | Notes |
+| Setting | Starts at | Notes |
 |---|---|---|
-| Input | silhouettes + noise | What the solver sees. *silhouettes + noise* is what `loader_wt_control_rec_error_trace.m` does (the ground-truth masks with salt & pepper noise). *RGB photos* runs on the colour images, using the three-channel branch of the MATLAB loaders: the image force and the energy are summed over R, G and B, and the inside/outside means are taken per channel (zero pixels are ignored, as in `get_image_stat.m`). Noise, if set, is applied to each channel independently. The ground-truth masks are still used for IoU and the error metrics. |
-| Grid | 100³ | The MATLAB code uses 150³. 64³ is fast; 200³ and 300³ are slower (about 1 s and 3 s per iteration natively; the browser is a bit slower) and need roughly 0.6 GB and 1 GB. The camera geometry is the same at every size (voxels are rescaled). |
-| Smoothing | 0.001 | Weight of the mean-curvature term (the MATLAB loader's value). Values around 0.1 to 1 smooth more; above about 3 the shape collapses. Applies from the next iteration, no re-initialise needed. |
-| Re-init | every 5, step 0.5 | How often the level set is re-initialised (Sussman) and how big each correction is. The loader's schedule makes the shape pulse every 5 iterations, because each re-initialisation moves the surface; a smaller step (0.05 to 0.1) and a longer interval (10 to 20) remove the pulsing. Applies from the next iteration. |
-| Noise | 0.90 | `imnoise(gt, 'salt & pepper', 0.90)`, as in the loader. At 0 the carving converges visibly within tens of iterations. |
+| Input | RGB photos | What the solver sees. *RGB photos* runs on the colour images, using the three-channel branch of the MATLAB loaders: the image force and the energy are summed over R, G and B, and the inside/outside means are taken per channel (zero pixels are ignored, as in `get_image_stat.m`). *silhouettes + noise* is what `loader_wt_control_rec_error_trace.m` does (the ground-truth masks with salt & pepper noise). Noise, if set, is applied to each channel independently. The ground-truth masks are always used for IoU and the error metrics. |
+| Grid | 150³ | The MATLAB size. 64³ is fast; 200³ and 300³ are slower (about 1 s and 3 s per iteration natively; the browser is a bit slower) and need roughly 0.6 GB and 1 GB. The camera geometry is the same at every size (voxels are rescaled). |
+| Noise | 0 | `imnoise(gt, 'salt & pepper', d)` as in the loader, which uses 0.90. At 0 the carving converges visibly within tens of iterations. |
 | Seed | 0 | Noise random seed. |
+| Smoothing | 0.04 | Weight of the mean-curvature term. The loader uses 0.001, which is very weak. In a clean 64³ run of 60 iterations (every 10 / step 0.05), raising it from 0.001 to 1 made the surface about a quarter smoother (roughness 6.1 to 4.7) and raised IoU from 0.814 to 0.853; at 3 it over-smoothed (IoU 0.75), and much higher values collapse the shape. Applies from the next iteration, no re-initialise needed. |
+| Re-init | every 5, step 0.25 | How often the level set is re-initialised (Sussman) and how big each correction is. The loader's schedule (every 5, step 0.5) makes the shape pulse every 5 iterations, because each re-initialisation moves the surface; a smaller step (0.05 to 0.1) and a longer interval (10 to 20) remove the pulsing. Applies from the next iteration. |
+| Show | Solver input | What the cards display: the photo, what the solver sees, or the ground truth. |
+| all at once | ticked | Next to **Plug in**: apply every stroke of the interaction replay immediately, instead of at the iteration it was recorded at. **Play** always uses the recorded timing and the recorded settings. |
 
 Change a setting, then press **Re-initialise** (strokes you drew are kept and re-sent).
 
