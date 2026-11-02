@@ -1,4 +1,4 @@
-"""The sample stroke sets shipped in web/app/data/strokes/ are valid for the dataset they are listed for."""
+"""The interaction replays shipped in web/app/data/strokes/ are valid for the dataset they are listed for."""
 import json
 import os
 
@@ -10,7 +10,7 @@ from recon3d import export
 STROKES = os.path.join(os.path.dirname(__file__), "..", "web", "app", "data", "strokes")
 MANIFEST = os.path.join(STROKES, "manifest.json")
 
-pytestmark = pytest.mark.skipif(not os.path.exists(MANIFEST), reason="no sample strokes shipped")
+pytestmark = pytest.mark.skipif(not os.path.exists(MANIFEST), reason="no interaction replays shipped")
 
 
 def _samples():
@@ -49,3 +49,14 @@ def test_samples_rasterise_to_control_masks():
         n_inside = sum(1 for p in per_view for st in p if st["type"] == "in")
         n_outside = sum(1 for p in per_view for st in p if st["type"] == "out")
         assert n_inside > 0 and n_outside > 0 and n_inside + n_outside == s["strokes"]
+
+
+def test_recorded_settings_are_ones_the_app_can_apply():
+    """Play re-applies these to the page's controls; unknown values would be silently ignored."""
+    for s in _samples():
+        st = export.load_session(os.path.join(STROKES, s["file"])).get("settings", {})
+        assert st.get("source", "gt") in ("gt", "photo")
+        assert st.get("reinit_every", 5) in (1, 2, 5, 10, 20, 50, 10 ** 9)
+        assert st.get("reinit_dt", 0.5) in (0.5, 0.25, 0.1, 0.05)
+        assert 0.001 - 1e-12 <= st.get("curvature_weight", 0.001) <= 10 ** 0.5     # the Smoothing slider's range
+        assert 0 <= st.get("noise", 0) <= 0.95
