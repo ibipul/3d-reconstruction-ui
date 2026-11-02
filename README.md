@@ -49,6 +49,38 @@ PYTHONPATH=src .venv/bin/python scripts/smoke.py 100 30 0.0   # grid, iterations
 ## Docs
 - [MATLAB codebase map](docs/matlab-architecture.md) – how the original scripts and functions fit together
 
+## How to cite
+This is a Python port of the MATLAB code ([3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab))
+behind the paper below. If you use it, please cite **both** the paper and the software. GitHub's
+**Cite this repository** button (right sidebar) gives the software citation from [CITATION.cff](CITATION.cff).
+
+> B. Islam, J. Liu, A. Yezzi and R. Sandhu, "An Interactive Control Approach to 3D Shape Reconstruction,"
+> *2020 American Control Conference (ACC)*, 2020, pp. 5096–5101, doi: [10.23919/ACC45564.2020.9147728](https://doi.org/10.23919/ACC45564.2020.9147728).
+> Preprint: [arXiv:1910.02738](https://arxiv.org/abs/1910.02738).
+
+```bibtex
+@inproceedings{islam2020interactive,
+  author    = {Islam, Bipul and Liu, Ji and Yezzi, Anthony and Sandhu, Romeil},
+  title     = {An Interactive Control Approach to {3D} Shape Reconstruction},
+  booktitle = {2020 American Control Conference (ACC)},
+  year      = {2020},
+  pages     = {5096--5101},
+  publisher = {IEEE},
+  doi       = {10.23919/ACC45564.2020.9147728}
+}
+```
+
+And the software:
+
+```bibtex
+@software{islam_interactive_3d_reconstruction,
+  author    = {Islam, Bipul},
+  title     = {Interactive {3D} Reconstruction},
+  version   = {0.1.0},
+  url       = {https://github.com/ibipul/3d-reconstruction-ui}
+}
+```
+
 ## License
 Licensed under the [Apache License, Version 2.0](LICENSE). The MATLAB implementation this is ported from,
 [3d-reconstruction-ui-matlab](https://github.com/ibipul/3d-reconstruction-ui-matlab), is MIT-licensed and

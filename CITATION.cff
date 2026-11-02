@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software (metadata below) and the paper listed under references."
+type: software
+title: "Interactive 3D Reconstruction"
+abstract: >-
+  Silhouette-based 3D reconstruction by level-set evolution, with user strokes
+  (inside / outside) that steer the result. A Python port of the MATLAB code
+  (3d-reconstruction-ui-matlab) behind the paper "An Interactive Control
+  Approach to 3D Shape Reconstruction" (ACC 2020). Runs natively or in the
+  browser through Pyodide.
+authors:
+  - family-names: Islam
+    given-names: Bipul
+    orcid: "https://orcid.org/0009-0002-5209-7572"
+repository-code: "https://github.com/ibipul/3d-reconstruction-ui"
+url: "https://ibipul.github.io/3d-reconstruction-ui/"
+license: Apache-2.0
+version: 0.1.0
+keywords:
+  - 3D reconstruction
+  - level set
+  - shape from silhouettes
+  - interactive control
+  - human-in-the-loop
+references:
+  - type: conference-paper
+    title: "An Interactive Control Approach to 3D Shape Reconstruction"
+    authors:
+      - family-names: Islam
+        given-names: Bipul
+        orcid: "https://orcid.org/0009-0002-5209-7572"
+      - family-names: Liu
+        given-names: Ji
+      - family-names: Yezzi
+        given-names: Anthony
+      - family-names: Sandhu
+        given-names: Romeil
+    collection-title: "2020 American Control Conference (ACC)"
+    publisher:
+      name: IEEE
+    year: 2020
+    month: 7
+    start: 5096
+    end: 5101
+    doi: "10.23919/ACC45564.2020.9147728"
+    identifiers:
+      - type: other
+        value: "arXiv:1910.02738"
+        description: arXiv preprint

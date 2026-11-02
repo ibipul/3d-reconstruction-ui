@@ -1,0 +1,39 @@
+{
+  "title": "Interactive 3D Reconstruction",
+  "upload_type": "software",
+  "description": "<p>Silhouette-based 3D reconstruction by level-set evolution, with user strokes (inside / outside) that steer the result. Runs natively or in the browser through Pyodide.</p><p>This is a Python port of the MATLAB code (<a href=\"https://github.com/ibipul/3d-reconstruction-ui-matlab\">3d-reconstruction-ui-matlab</a>) behind the paper: B. Islam, J. Liu, A. Yezzi and R. Sandhu, \"An Interactive Control Approach to 3D Shape Reconstruction,\" 2020 American Control Conference (ACC), IEEE, 2020, pp. 5096-5101, doi: 10.23919/ACC45564.2020.9147728.</p><p>If you use this software, please cite both this record and the paper.</p>",
+  "creators": [
+    {
+      "name": "Islam, Bipul",
+      "orcid": "0009-0002-5209-7572"
+    }
+  ],
+  "license": "Apache-2.0",
+  "keywords": [
+    "3D reconstruction",
+    "level set",
+    "shape from silhouettes",
+    "interactive control",
+    "human-in-the-loop"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.23919/ACC45564.2020.9147728",
+      "relation": "isSupplementTo",
+      "scheme": "doi",
+      "resource_type": "publication-conferencepaper"
+    },
+    {
+      "identifier": "arXiv:1910.02738",
+      "relation": "isSupplementTo",
+      "scheme": "arxiv",
+      "resource_type": "publication-preprint"
+    },
+    {
+      "identifier": "https://github.com/ibipul/3d-reconstruction-ui-matlab",
+      "relation": "isDerivedFrom",
+      "scheme": "url",
+      "resource_type": "software"
+    }
+  ]
+}
