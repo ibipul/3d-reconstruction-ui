@@ -14,7 +14,12 @@
    "angleStep": 10,
    "focal": 520,
    "note": "The MATLAB repo's dataset25 photos with the dataset_sentinel_gt silhouettes as ground truth. Level cameras on a ring at 10 degree steps.",
-   "distance": 160
+   "distance": 160,
+   "box": [
+    20,
+    60,
+    80
+   ]
   },
   {
    "id": "zebra",
@@ -29,7 +34,12 @@
    "angleStep": 10,
    "focal": 520,
    "note": "Real turntable photos (684x461 originals shrunk to 320x216), run through the same camera ring as sentinel_polar: level cameras, 10 degree steps, focal 520 px. There are no silhouettes, so IoU, false positives/negatives and RMS error are not available. The ring's start angle and distance are guesses: tune Distance until the initial surface sits well inside the zebra in every view, then Re-initialise.",
-   "distance": 160
+   "distance": 160,
+   "box": [
+    20,
+    60,
+    80
+   ]
   }
  ]
 }

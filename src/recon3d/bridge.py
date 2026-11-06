@@ -13,13 +13,14 @@ from .data import gt_mask_from_gray
 from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
-def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None):
+def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
     and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
     required and the metrics that compare against the ground truth are None.
 
     `focal` (pixels) and `distance` (camera distance from the object in world units, default 160) are free
     parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
+    `box` is the initial surface, an (x, y, z) size in voxels at grid 150 (scaled with the grid); default: the MATLAB box.
 
     As in loader_wt_control_rec_error_trace.m, the observed image is the ground truth plus salt &
     pepper noise of density `noise`. If `photo_bytes` (n * rows * cols * 3 uint8 RGB) is given, the
@@ -42,6 +43,8 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     cfg = Config(grid=int(grid))
     if focal is not None:
         cfg.focal = float(focal)
+    if box is not None:
+        cfg.init_box = tuple(float(b) for b in box)
     if distance is not None:
         cfg.camera_dist = float(distance) / (4.0 * cfg.loc_scale)     # camera_dist 4 <-> 160 world units
     solver = Solver(images, masks, cfg)

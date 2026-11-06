@@ -122,3 +122,27 @@ def test_distance_moves_the_cameras():
     a = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos.tobytes())
     b = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos.tobytes(), distance=240.0)
     assert np.isclose(np.linalg.norm(a.views[0]["loc"]), 160.0) and np.isclose(np.linalg.norm(b.views[0]["loc"]), 240.0)
+
+
+def _box_extent(s):
+    inside = np.argwhere(s.phi >= 0)
+    return tuple(int(v) for v in (inside.max(0) - inside.min(0) + 1))
+
+
+def test_default_initial_box_matches_the_matlab_box_within_rounding():
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(4).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8).tobytes()
+    for grid in (64, 100, 150):
+        a = bridge.init_solver(None, n, rows, cols, grid, 0.0, 0, photos)
+        b = bridge.init_solver(None, n, rows, cols, grid, 0.0, 0, photos, box=(20, 60, 80))
+        assert max(abs(p - q) for p, q in zip(_box_extent(a), _box_extent(b))) <= 2, (grid, _box_extent(a), _box_extent(b))
+
+
+def test_initial_box_size_is_adjustable():
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(5).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8).tobytes()
+    small = bridge.init_solver(None, n, rows, cols, 64, 0.0, 0, photos, box=(10, 10, 20))
+    wide = bridge.init_solver(None, n, rows, cols, 64, 0.0, 0, photos, box=(50, 30, 20))
+    assert _box_extent(wide)[0] > _box_extent(small)[0] and _box_extent(wide)[1] > _box_extent(small)[1]
+    assert _box_extent(wide)[2] == _box_extent(small)[2]                 # same height
+    assert json.loads(bridge.step(wide, 2))["collapsed"] is None

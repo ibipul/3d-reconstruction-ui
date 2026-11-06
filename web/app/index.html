@@ -171,8 +171,8 @@ input[type=range] { accent-color: var(--accent); }
 
 <div class="setup">
   <label title="Which photo set to reconstruct. Only sentinel_polar has ground-truth silhouettes; for the others the IoU / error numbers are not available.">Dataset <select id="dataset" aria-label="Dataset"></select></label>
-  <label title="Camera distance from the object, in world units (sentinel_polar: 160). It sets how big the object looks compared with the initial surface, so adjust it per dataset by trial and error, then Re-initialise.">Distance <input type="number" id="distance" value="160" min="40" max="1000" step="5" style="width:5em"></label>
-  <span class="note" id="ds-note" style="flex-basis:100%"></span>
+  <label title="Camera distance from the object, in world units (sentinel_polar: 160). It sets how big the object looks compared with the initial surface, so adjust it per dataset by trial and error. Changing it re-initialises the run.">Distance <input type="number" id="distance" class="initp" value="160" min="40" max="1000" step="5" style="width:5em"></label>
+  <label title="Focal length of the cameras in pixels of the (shrunk) images. Larger zooms in: the object looks bigger. sentinel_polar uses 520 at 320 px high. Changing it re-initialises the run.">Focal <input type="number" id="focal" class="initp" value="520" min="50" max="5000" step="10" style="width:5.5em"></label>\n  <span class="group" role="group" aria-label="Initial surface" title="Size of the box the surface starts as, in voxels at grid 150 (scaled with the grid). The solver centres it on the origin. It should contain the object in every view and be a good deal smaller than the volume (150). Changing it re-initialises the run.">Initial box\n    <label>X <input type="number" id="box-x" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>\n    <label>Y <input type="number" id="box-y" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>\n    <label>Z <input type="number" id="box-z" class="initp" min="4" max="146" step="2" style="width:4.5em"></label></span>\n  <span class="note" id="ds-note" style="flex-basis:100%"></span>
   <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt">silhouettes + noise (loader)</option><option value="photo" selected>RGB photos</option></select></label>
   <label>Grid <select id="grid-n"><option value="64">64³</option><option value="100">100³</option><option value="150" selected>150³ (MATLAB)</option><option value="200">200³ (slower)</option><option value="300">300³ (slow, ~1 GB)</option></select></label>
   <label>Noise <input type="range" id="noise" min="0" max="0.95" step="0.05" value="0"> <span id="noise-v" class="mono">0.00</span></label>
@@ -451,10 +451,10 @@ input[type=range] { accent-color: var(--accent); }
     if (sx.length < nv) { sx = new Float32Array(nv); sy = new Float32Array(nv); sd = new Float32Array(nv); sn = new Float32Array(nv); sh = new Float32Array(nv); }
     var c1 = Math.cos(yaw), s1 = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), v = M.v, n = M.n;
     for (var i = 0; i < nv; i++) {
-      var x = v[3 * i], y = v[3 * i + 1], z = v[3 * i + 2];
+      var x = v[3 * i], y = -v[3 * i + 1], z = -v[3 * i + 2];      // the camera frame has z pointing down: turn it 180° about x so the shape stands upright
       var x1 = x * c1 - y * s1, y1 = x * s1 + y * c1;
       sx[i] = cx + x1 * S; sy[i] = cy - (z * cp + y1 * sp) * S; sd[i] = y1 * cp - z * sp;   // larger depth = farther
-      var nx = n[3 * i], ny = n[3 * i + 1], nz = n[3 * i + 2];
+      var nx = n[3 * i], ny = -n[3 * i + 1], nz = -n[3 * i + 2];
       var n1x = nx * c1 - ny * s1, n1y = nx * s1 + ny * c1;
       var nup = nz * cp + n1y * sp, ndep = n1y * cp - nz * sp;
       sn[i] = ndep;                                                                          // < 0: faces the viewer
@@ -499,6 +499,7 @@ input[type=range] { accent-color: var(--accent); }
   }
   function pr(x, y, z, S, cx, cy) {
     var c1 = Math.cos(yaw), s1 = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    y = -y; z = -z;                                           // same turn as the mesh, so the camera ring and floor agree with it
     var x1 = x * c1 - y * s1, y1 = x * s1 + y * c1;
     return [cx + x1 * S, cy - (z * cp + y1 * sp) * S];
   }
@@ -507,8 +508,8 @@ input[type=range] { accent-color: var(--accent); }
     vctx.fillStyle = css('--vp-bg'); vctx.fillRect(0, 0, w, h);
     vctx.strokeStyle = css('--vp-ink'); vctx.globalAlpha = .18; vctx.lineWidth = Math.max(1, px);
     for (var g = -3; g <= 3; g++) {
-      var a = pr(g * .5, -1.5, -.6, S, cx, cy), b = pr(g * .5, 1.5, -.6, S, cx, cy); vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
-      a = pr(-1.5, g * .5, -.6, S, cx, cy); b = pr(1.5, g * .5, -.6, S, cx, cy); vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
+      var a = pr(g * .5, -1.5, .6, S, cx, cy), b = pr(g * .5, 1.5, .6, S, cx, cy); vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
+      a = pr(-1.5, g * .5, .6, S, cx, cy); b = pr(1.5, g * .5, .6, S, cx, cy); vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
     }
     vctx.globalAlpha = 1;
     if (showPhi) drawSurface(mesh, S, cx, cy, css('--phi'));
@@ -624,11 +625,15 @@ input[type=range] { accent-color: var(--accent); }
     setStatus('Building the volume…');
     var all = null;
     if (hasGT) { all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H); }
-    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, focal: ds.focal, distance: +$('distance').value || 160 };
+    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, focal: +$('focal').value || ds.focal, distance: +$('distance').value || 160, box: [+$('box-x').value, +$('box-y').value, +$('box-z').value] };
     if ($('source').value === 'photo' || !hasGT) msg.photos = photoBytes();
     worker.postMessage(msg);
   }
   $('reset').onclick = maybeInit;
+  var reinitTimer = null;                                     // camera and initial-surface settings: show their effect right away
+  Array.prototype.forEach.call(document.querySelectorAll('.initp'), function (el) {
+    el.addEventListener('input', function () { clearTimeout(reinitTimer); reinitTimer = setTimeout(function () { if (booted && imagesReady) maybeInit(); }, 500); });
+  });
   $('noise').oninput = function (e) { $('noise-v').textContent = (+e.target.value).toFixed(2); };
   $('src').onchange = function (e) { srcMode = e.target.value; refreshAll(); };
   $('t-phi').onchange = function (e) { showPhi = e.target.checked; refreshAll(); requestRender(); };
@@ -834,7 +839,7 @@ input[type=range] { accent-color: var(--accent); }
     strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
     cur = -1; sel = -1; $('focus').hidden = true;
     fc.width = W * 2; fc.height = H * 2;
-    $('dataset').value = id; $('distance').value = d.distance || 160; $('ds-note').textContent = d.note || '';
+    $('dataset').value = id; $('distance').value = d.distance || 160; $('focal').value = d.focal; var bx = d.box || [20, 60, 80]; $('box-x').value = bx[0]; $('box-y').value = bx[1]; $('box-z').value = bx[2]; $('ds-note').textContent = d.note || '';
     try { var u = new URL(location.href); u.searchParams.set('dataset', id); history.replaceState(null, '', u); } catch (e) { /* not essential */ }
     setGTControls(); buildGrid(); samples = []; populateSamples(); loadManifest(); showMetrics(); drawPlot(); requestRender(); showInfo('');
     setStatus('Loading images…');

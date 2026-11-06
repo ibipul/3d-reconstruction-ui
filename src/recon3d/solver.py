@@ -39,6 +39,7 @@ class Config:
     grid: int = 100               # voxels per side (MATLAB: 150)
     focal: float = 520.0          # rec_error_trace: f = 520
     rec_length_ref: int = 80      # at grid 150
+    init_box: tuple | None = None  # initial surface: (x, y, z) size in voxels at grid 150; None = the MATLAB box (20, 60, 80)
     narrow_band_high: float = 5.0
     sussman_every: int = 5
     sussman_dt: float = 0.5
@@ -90,13 +91,21 @@ class Solver:
         # level sets
         s = cfg.scale()
         space = cfg.grid
-        rec = int(round(cfg.rec_length_ref * s))
-        if (space - rec) % 2:
-            rec += 1
-        off_a, off_b = max(int(round(30 * s)), 1), max(int(round(10 * s)), 1)
+        if cfg.init_box is None:
+            rec = int(round(cfg.rec_length_ref * s))
+            if (space - rec) % 2:
+                rec += 1
+            off_a, off_b = max(int(round(30 * s)), 1), max(int(round(10 * s)), 1)
+            rec_z = None
+        else:
+            # a box of the requested x / y / z size, centred in the volume (the solver re-centres on it anyway)
+            dx, dy, dz = (min(max(int(round(float(d) * s)), 2), space - 4) for d in cfg.init_box)
+            rec = space                                       # footprint inset from the edges of the volume
+            off_a, off_b = max((space - dx + 1) // 2, 1), max((space - dy + 1) // 2, 1)   # +1: the surface voxels (phi = 0) belong to the box
+            rec_z = dz + ((space - dz) % 2)
         # float32 above the MATLAB size keeps 200^3 / 300^3 within browser memory
         dtype = np.float64 if cfg.grid <= REF_GRID else np.float32
-        self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype)
+        self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype, rec_z=rec_z)
         self.phi_hat = self.phi.copy(order="F")
         self.shape = self.phi.shape
         self.voxel_scale = REF_GRID / cfg.grid

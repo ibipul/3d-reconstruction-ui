@@ -27,9 +27,17 @@ The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the pho
 | `sentinel_polar` | 36 synthetic views, 200×320 | yes: IoU, FP/FN and RMS error are shown |
 | `zebra` | 36 real photos, 320×216 | no: the *Silhouettes + noise* input, the *Ground truth* view and the IoU / FP+FN / RMS traces are disabled; energy and Lyapunov remain |
 
-Every dataset uses the same camera ring as the MATLAB code (level cameras, 10° steps). **Distance** is the
-camera distance in world units (160 for sentinel_polar). It is a free parameter: it sets how large the object looks
-next to the initial surface, so tune it per dataset by trial and error, then *Re-initialise*. Interaction replays
+Every dataset uses the same camera ring as the MATLAB code (level cameras, 10° steps). Three groups of settings
+are free parameters, set from `datasets.json` when you pick a dataset and editable before you press Run (changing one
+re-initialises the run half a second later, so the cards show the new initial outlines at once):
+
+- **Distance**: camera distance in world units (160 for sentinel_polar). With the focal length it sets how large the
+  object looks next to the initial surface.
+- **Focal**: focal length in pixels of the (shrunk) images (520 at 320 px high for sentinel_polar).
+- **Initial box** X / Y / Z: the size of the box the surface starts as, in voxels at grid 150 (scaled with the grid; the
+  MATLAB box is 20 × 60 × 80). The solver centres it on the origin.
+
+Tune them per dataset by trial and error until the initial outline sits inside the object in every view. Interaction replays
 ship with their dataset (`data/<dataset>/strokes/` and its `manifest.json`; zebra has none, so its replay controls are hidden); a strokes file drawn on one dataset is refused on another.
 To add a dataset, put `photos/1..N.<ext>` (and `gt/1..N.png` if it has ground truth) in `data/<name>/` and add an entry to `datasets.json`.
 
@@ -41,7 +49,7 @@ To add a dataset, put `photos/1..N.<ext>` (and `gt/1..N.png` if it has ground tr
 - **Click a card** to focus it. Pick **Inside** or **Outside** and draw. Strokes are sent to the
   solver and steer φ̂ from the next iteration (positive = inside, negative = outside, as in
   `erase_from.m` / `interact_to.m`).
-- **Sidebar:** the zero level set of φ as a lit surface (drag to orbit, scroll to zoom, **Enlarge** for a wider
+- **Sidebar:** the zero level set of φ as a lit surface (shown upright; drag to orbit, scroll to zoom, **Enlarge** for a wider
   panel; optional φ̂ wireframe), a compact ring marking the camera angles, and traces (energy, IoU against
   the ground truth, FP+FN, RMS error, Lyapunov). Outlines on the cards are smoothed sub-pixel contours.
 

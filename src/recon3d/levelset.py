@@ -121,19 +121,22 @@ def signed_distance(mask):
 # Memory-lean variants for large grids (200^3, 300^3). Same results as the full-grid
 # functions above wherever the result matters (near the surface and inside the object).
 # ----------------------------------------------------------------------------------------
-def initial_box_extent(space_length: int, rec_length: int, off_a: int, off_b: int):
+def initial_box_extent(space_length: int, rec_length: int, off_a: int, off_b: int, rec_z: int | None = None):
     """Inclusive 0-based voxel ranges (i0, i1, j0, j1, k0, k1) of the initial box, and the volume depth.
-    Same box as `initial_box`."""
+    Same box as `initial_box`. `rec_z` (default `rec_length`) makes the box's height independent of its footprint."""
     nb = (space_length - rec_length) // 2
     start, end = nb, rec_length + nb
     i0, i1 = start + off_a - 1, end - off_a - 1
     j0, j1 = start + off_b - 1, end - off_b - 1
-    k0, k1 = nb + 1, nb + 1 + rec_length
-    depth = (nb + 1) + (rec_length + 1) + (nb + 1)
+    rz = rec_length if rec_z is None else rec_z
+    nbz = (space_length - rz) // 2
+    k0, k1 = nbz + 1, nbz + 1 + rz
+    depth = (nbz + 1) + (rz + 1) + (nbz + 1)
     return (i0, i1, j0, j1, k0, k1), depth
 
 
-def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, dtype=np.float64, slab: int = 24):
+def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, dtype=np.float64, slab: int = 24,
+                    rec_z: int | None = None):
     """Signed distance of the initial box, computed analytically (no mask volume, no EDT).
 
     For an axis-aligned box of voxels the Euclidean distance transform has a closed form:
@@ -142,7 +145,7 @@ def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, 
     face. This equals `signed_distance(initial_box(...))` exactly, and is built slab by slab so
     the peak memory stays near the size of the result.
     """
-    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b)
+    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b, rec_z)
     nx = ny = space_length
     out = np.empty((nx, ny, depth), dtype=dtype, order="F")
     j = np.arange(ny, dtype=np.float64)[None, :, None]
