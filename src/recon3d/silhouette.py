@@ -243,3 +243,61 @@ def smooth_outline(mask, sigma=1.5):
     out[:, [0, 2]] += sl[1].start
     out[:, [1, 3]] += sl[0].start
     return out.astype(np.float32)
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Bhattacharyya region energy (Michailovich, Rathi, Tannenbaum 2007): the inside and the outside of the surface should
+# have as different intensity distributions as possible. With the smoothed histograms p_in, p_out of an image channel,
+# B = sum_z sqrt(p_in(z) p_out(z)) is 1 for equal distributions and 0 for disjoint ones; the energy is ln B.
+
+def image_histograms(img, mask, bins):
+    """Counts of the pixel intensities (0..255) inside and outside the mask: (hist_in, hist_out), each (channels, bins).
+    A grey image has one channel, a colour image three."""
+    m = mask.astype(bool)
+    chans = [img[:, :, c] for c in range(3)] if img.ndim == 3 else [img]
+    h_in = np.zeros((len(chans), bins)); h_out = np.zeros((len(chans), bins))
+    for c, ch in enumerate(chans):
+        b = (ch.astype(np.int64) * bins) // 256
+        h_in[c] = np.bincount(b[m], minlength=bins)[:bins]
+        h_out[c] = np.bincount(b[~m], minlength=bins)[:bins]
+    return h_in, h_out
+
+
+def bhattacharyya_tables(h_in, h_out, sigma=1.0, eps=1e-4, force_scale=1e4, balanced=False):  # force_scale=None: the raw derivative
+    """From the pooled histograms, per channel, the energy ln B and the force on the surface as a function of the intensity.
+
+    Returns (ln_b summed over channels, tables of shape (channels, bins)). `tables[c][bin]` is the speed with which a
+    boundary pixel of that intensity pushes the surface outwards (positive: grow) to lower ln B, i.e. -d(ln B)/dA per
+    unit of boundary. Zero tables when the inside or outside is empty. The derivative of B for a moving boundary is
+        dB = sum_boundary v * [ (K*sqrt(p_out/p_in) - B) / (2 A_in) - (K*sqrt(p_in/p_out) - B) / (2 A_out) ]
+    with K the smoothing kernel of the histograms, A_in / A_out the pixel counts (Michailovich et al. 2007, eq. 12).
+    """
+    chans, bins = h_in.shape
+    tables = np.zeros((chans, bins))
+    a_in, a_out = float(h_in[0].sum()), float(h_out[0].sum())
+    if a_in == 0 or a_out == 0:
+        return 0.0, tables
+    ln_b = 0.0
+    for c in range(chans):
+        pi = ndimage.gaussian_filter1d(h_in[c] / a_in, sigma, mode="nearest") + eps
+        po = ndimage.gaussian_filter1d(h_out[c] / a_out, sigma, mode="nearest") + eps
+        pi /= pi.sum(); po /= po.sum()
+        b = float(np.sqrt(pi * po).sum())
+        s1 = ndimage.gaussian_filter1d(np.sqrt(po / pi), sigma, mode="nearest")
+        s2 = ndimage.gaussian_filter1d(np.sqrt(pi / po), sigma, mode="nearest")
+        wi, wo = (1.0 / a_in, 1.0 / a_out) if not balanced else (1.0, 1.0)
+        g = (s1 - b) * wi / 2.0 - (s2 - b) * wo / 2.0                # dB per unit of outward boundary speed
+        tables[c] = -g / b                                           # grow where that lowers ln B
+        ln_b += float(np.log(b))
+    # Only the shape of the force matters (the solver normalises it every iteration), but the MATLAB stabilisers
+    # ("+ 1e-5" in those normalisations) assume forces of the size of the Chan-Vese ones, ~1e3..1e4; the raw derivative
+    # is ~1/(pixel count). Scale all channels together, so their relative weights stay.
+    if force_scale:
+        # A few rare intensities can have a huge derivative (a ratio of two tiny probabilities). The solver ties the
+        # interaction term to the largest force, so such spikes would drown the rest: clip at 3 RMS over the pixels.
+        w = (h_in + h_out) / (a_in + a_out)
+        rms = float(np.sqrt((w * tables ** 2).sum() / chans))
+        if rms > 0:
+            np.clip(tables, -3.0 * rms, 3.0 * rms, out=tables)
+            tables *= force_scale / (3.0 * rms)
+    return ln_b, tables

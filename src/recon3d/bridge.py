@@ -13,7 +13,8 @@ from .data import gt_mask_from_gray
 from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
-def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0):
+def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0,
+                energy="bhattacharyya"):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
     and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
     required and the metrics that compare against the ground truth are None.
@@ -21,6 +22,7 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     `focal` (pixels) and `distance` (camera distance from the object in world units, default 160) are free
     parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
     `box` is the initial surface, an (x, y, z) size in voxels at grid 150 (scaled with the grid); default: the MATLAB box.
+    `energy` is the region energy: "bhattacharyya" (histograms inside vs outside) or "chan_vese" (means, as in the MATLAB code).
     `box_angle` turns that box about the vertical axis (degrees). `camera_height` raises the cameras above the ring
     plane (world units, positive = above the object).
 
@@ -42,7 +44,9 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     else:
         src = g
     images = [imnoise_salt_pepper(src[i], float(noise), rng) if noise > 0 else src[i].copy() for i in range(n)]
-    cfg = Config(grid=int(grid))
+    if energy not in ("bhattacharyya", "chan_vese"):
+        raise ValueError("unknown energy: %s" % energy)
+    cfg = Config(grid=int(grid), energy=energy)
     if focal is not None:
         cfg.focal = float(focal)
     if box is not None:

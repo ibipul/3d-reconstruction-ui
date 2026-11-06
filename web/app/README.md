@@ -18,6 +18,24 @@ Open http://localhost:8000/web/app/. It must be served over HTTP: as a `file://`
 blocks the worker and image decoding. The first load downloads Pyodide, NumPy and SciPy from the
 jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 
+## Energy
+
+The **Energy** setting chooses the region energy the surface descends (change it, then *Re-initialise*):
+
+- **Bhattacharyya** (default): the energy is ln B, with B = Σ √(p_in · p_out) over the smoothed colour histograms of the
+  pixels inside and outside the surface (32 bins per channel, pooled over all views; with RGB the channels are summed).
+  B is 1 when the two histograms are equal and falls toward 0 as they separate, so the energy goes down as the inside and
+  outside look more different. The force on each boundary pixel is the gradient of B (Michailovich, Rathi and
+  Tannenbaum 2007): a pixel is pushed in if its colour is common outside and rare inside, and out in the opposite case.
+  One departure from the exact gradient: it weighs inside and outside equally instead of by 1/area each. With the area
+  weights the force just outside the true edge is much stronger than just inside it (the inside is the smaller region),
+  and the surface drifts inward. The forces are also scaled to the range of the Chan-Vese ones, because the MATLAB
+  normalisations carry fixed stabilising constants.
+- **Chan-Vese**: the MATLAB code's energy, which compares only the mean colour inside and outside.
+
+The *Energy* trace shows ln B (at most 0) for Bhattacharyya and minus the squared difference of the means for Chan-Vese,
+so the two are not comparable with each other.
+
 ## Datasets
 
 The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the photo sets listed in `data/datasets.json`:

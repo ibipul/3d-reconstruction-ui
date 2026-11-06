@@ -47,6 +47,12 @@ class Config:
     sussman_dt: float = 0.5
     curvature_weight: float = 0.001
     eps_visibility: float = 120.0
+    energy: str = "bhattacharyya"  # region energy: "bhattacharyya" (histograms) or "chan_vese" (means, as in the MATLAB code)
+    hist_bins: int = 32           # Bhattacharyya: intensity bins per channel
+    hist_sigma: float = 1.0       # Bhattacharyya: smoothing of the histograms, in bins
+    hist_eps: float = 1e-4        # Bhattacharyya: probability floor of every bin
+    hist_balanced: bool = True    # Bhattacharyya: weigh inside and outside equally, not 1/area each: the exact area weights
+                                  # make the force much stronger just outside the true edge than just inside, so the surface drifts inward
     camera_dist: float = 4.0
     loc_scale: float = 10.0       # loaders: camera_loc = cam_mat(4,:) * 10
 
@@ -146,6 +152,11 @@ class Solver:
         self.in_pt_hat, self.normals_hat, self.coords_hat = self._voxels(self.phi_hat, "phi_hat")
         in_sum = np.zeros(3); out_sum = np.zeros(3)
         iin_sum = np.zeros(3); iout_sum = np.zeros(3)
+        bh = cfg.energy == "bhattacharyya"
+        if bh:
+            chans = 3 if self.images[0].ndim == 3 else 1
+            hz = lambda: np.zeros((chans, cfg.hist_bins))
+            h_in, h_out, hh_in, hh_out = hz(), hz(), hz(), hz()
         for v, view in enumerate(self.views):
             rows, cols = view["sz"]
             px, py, z = cam.project_points(self.coords, view["P"], view["sz"])
@@ -156,14 +167,21 @@ class Solver:
                                                self.nhood, cfg.eps_visibility)
             occ_h, sp_h = sil.project_phi_to_image(mask_hat, in_img_hat, view["loc"], self.coords_hat,
                                                    self.normals_hat, self.nhood, cfg.eps_visibility)
-            mi, mo = sil.get_image_stat(self.images[v], mask)
-            imi, imo = sil.get_image_stat(self.images[v], mask_hat)
-            in_sum += mi; out_sum += mo; iin_sum += imi; iout_sum += imo
+            if bh:                                           # histograms pooled over the views
+                a, b = sil.image_histograms(self.images[v], mask, cfg.hist_bins); h_in += a; h_out += b
+                a, b = sil.image_histograms(self.images[v], mask_hat, cfg.hist_bins); hh_in += a; hh_out += b
+            else:
+                mi, mo = sil.get_image_stat(self.images[v], mask)
+                imi, imo = sil.get_image_stat(self.images[v], mask_hat)
+                in_sum += mi; out_sum += mo; iin_sum += imi; iout_sum += imo
             self.cache[v] = {"mask": mask, "mask_hat": mask_hat, "occ": occ, "sil": sp,
                              "occ_hat": occ_h, "sil_hat": sp_h, "depth": z[occ]}
         n = self.n_views
         self.in_mean, self.out_mean = in_sum / n, out_sum / n
         self.iin_mean, self.iout_mean = iin_sum / n, iout_sum / n
+        if bh:
+            self.energy_value, self.force_tables = sil.bhattacharyya_tables(h_in, h_out, cfg.hist_sigma, cfg.hist_eps, balanced=cfg.hist_balanced)
+            self.ienergy_value, _ = sil.bhattacharyya_tables(hh_in, hh_out, cfg.hist_sigma, cfg.hist_eps)
 
     # ------------------------------------------------------------------ strokes
     def set_strokes(self, view: int, strokes):
@@ -224,7 +242,15 @@ class Solver:
 
             # image force (Chan-Vese style, per channel), flipped, depth-weighted
             img = self.images[v]
-            if img.ndim == 3:
+            if cfg.energy == "bhattacharyya":
+                # the Bhattacharyya force is already the outward speed (positive: grow); see sil.bhattacharyya_tables
+                if img.ndim == 3:
+                    t = sum(self.force_tables[k][(img[:, :, k].ravel(order="F")[img_idx].astype(np.int64) * cfg.hist_bins) // 256]
+                            for k in range(3))
+                else:
+                    t = self.force_tables[0][(img.ravel(order="F")[img_idx].astype(np.int64) * cfg.hist_bins) // 256]
+                t = -t                                     # undone by the flip below, which the Chan-Vese form needs
+            elif img.ndim == 3:
                 t = sum(-1.0 * (in_m[k] - out_m[k]) *
                         (2.0 * img[:, :, k].ravel(order="F")[img_idx].astype(float) - (in_m[k] + out_m[k]))
                         for k in range(3))
@@ -250,10 +276,13 @@ class Solver:
                 n_hat = 0.5 * d_hat / np.max(np.abs(d_hat + 1e-5))
                 pf_hat[band_hat[ibi_h]] += n_hat[ioi_h]
 
-        d = self.in_mean - self.out_mean
-        di = self.iin_mean - self.iout_mean
-        energy = -float((d ** 2).sum())
-        ienergy = -float((di ** 2).sum())
+        if cfg.energy == "bhattacharyya":
+            energy, ienergy = float(self.energy_value), float(self.ienergy_value)       # ln B, <= 0
+        else:
+            d = self.in_mean - self.out_mean
+            di = self.iin_mean - self.iout_mean
+            energy = -float((d ** 2).sum())
+            ienergy = -float((di ** 2).sum())
         if it % cfg.sussman_every == 1:
             ls.sussman_local(self.phi, cfg.sussman_dt)        # in place, on the box around the object
             ls.sussman_local(self.phi_hat, cfg.sussman_dt)
