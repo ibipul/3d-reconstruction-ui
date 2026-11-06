@@ -39,6 +39,8 @@ class Config:
     grid: int = 100               # voxels per side (MATLAB: 150)
     focal: float = 520.0          # rec_error_trace: f = 520
     rec_length_ref: int = 80      # at grid 150
+    init_box_angle: float = 0.0   # degrees: the initial box turned about the vertical axis (only with init_box)
+    camera_height: float = 0.0    # world units: the cameras raised above the ring plane (the MATLAB setups are level)
     init_box: tuple | None = None  # initial surface: (x, y, z) size in voxels at grid 150; None = the MATLAB box (20, 60, 80)
     narrow_band_high: float = 5.0
     sussman_every: int = 5
@@ -80,7 +82,7 @@ class Solver:
         for i in range(self.n_views):
             img = self.images[i]
             sz = img.shape[:2]
-            cx, cy, cz, loc = cam.select_camera_auto(i + 1, cfg.camera_dist, 0.0)
+            cx, cy, cz, loc = cam.select_camera_auto(i + 1, cfg.camera_dist, -cfg.camera_height / cfg.loc_scale)   # world z points down
             loc = loc * cfg.loc_scale
             P = cam.create_projection_operator(cx, cy, cz, loc, sz, cfg.focal)
             self.views.append({
@@ -105,7 +107,10 @@ class Solver:
             rec_z = dz + ((space - dz) % 2)
         # float32 above the MATLAB size keeps 200^3 / 300^3 within browser memory
         dtype = np.float64 if cfg.grid <= REF_GRID else np.float32
-        self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype, rec_z=rec_z)
+        if cfg.init_box is not None:
+            self.phi = ls.rotated_box_phi(space, rec, off_a, off_b, cfg.init_box_angle, dtype, rec_z=rec_z)
+        else:
+            self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype, rec_z=rec_z)
         self.phi_hat = self.phi.copy(order="F")
         self.shape = self.phi.shape
         self.voxel_scale = REF_GRID / cfg.grid

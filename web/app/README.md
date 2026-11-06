@@ -27,17 +27,19 @@ The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the pho
 | `sentinel_polar` | 36 synthetic views, 200×320 | yes: IoU, FP/FN and RMS error are shown |
 | `zebra` | 36 real photos, 320×216 | no: the *Silhouettes + noise* input, the *Ground truth* view and the IoU / FP+FN / RMS traces are disabled; energy and Lyapunov remain |
 
-Every dataset uses the same camera ring as the MATLAB code (level cameras, 10° steps). Three groups of settings
-are free parameters, set from `datasets.json` when you pick a dataset and editable before you press Run (changing one
-re-initialises the run half a second later, so the cards show the new initial outlines at once):
+Every dataset starts from the same camera ring as the MATLAB code (level cameras, 10° steps). These settings are free
+parameters, taken from `datasets.json` when you pick a dataset and editable before you press Run:
 
-- **Distance**: camera distance in world units (160 for sentinel_polar). With the focal length it sets how large the
-  object looks next to the initial surface.
+- **Distance**: camera distance in world units (160 for sentinel_polar).
 - **Focal**: focal length in pixels of the (shrunk) images (520 at 320 px high for sentinel_polar).
-- **Initial box** X / Y / Z: the size of the box the surface starts as, in voxels at grid 150 (scaled with the grid; the
-  MATLAB box is 20 × 60 × 80). The solver centres it on the origin.
+- **Camera height**: the cameras raised above the ring plane, in world units (0 = level; positive = looking down on the object).
+- **Initial box** width / depth / height: the size of the box the surface starts as, in voxels at grid 150 (scaled with the
+  grid; the MATLAB box is 20 × 60 × 80), and **angle**, which turns the box about the vertical axis (it matters because
+  width and depth differ).
 
-Tune them per dataset by trial and error until the initial outline sits inside the object in every view. Interaction replays
+Every change redraws the starting surface straight away: as a bold outline on all the views (and the open view) and as the
+box in the 3D panel, using a quick coarse-grid preview. The real run is re-initialised once you stop typing for about a
+second and a half. Tune until the outline sits just around the object in every view, then Run. Interaction replays
 ship with their dataset (`data/<dataset>/strokes/` and its `manifest.json`; zebra has none, so its replay controls are hidden); a strokes file drawn on one dataset is refused on another.
 To add a dataset, put `photos/1..N.<ext>` (and `gt/1..N.png` if it has ground truth) in `data/<name>/` and add an entry to `datasets.json`.
 

@@ -135,6 +135,31 @@ def initial_box_extent(space_length: int, rec_length: int, off_a: int, off_b: in
     return (i0, i1, j0, j1, k0, k1), depth
 
 
+def rotated_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, angle_deg: float, dtype=np.float64,
+                    slab: int = 24, rec_z: int | None = None):
+    """Signed distance (>= 0 inside) of the initial box turned by `angle_deg` about the vertical axis through its centre.
+
+    Same box and centre as `initial_box_phi`, and at angle 0 the same values. The distance is the exact one for a
+    box measured from the voxel centres: inside, the distance to the nearest face; outside, minus the distance to the box.
+    """
+    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b, rec_z)
+    cx, cy = 0.5 * (i0 + i1), 0.5 * (j0 + j1)
+    hx, hy, hz = 0.5 * (i1 - i0), 0.5 * (j1 - j0), 0.5 * (k1 - k0)
+    wz = np.abs(np.arange(depth, dtype=np.float64) - 0.5 * (k0 + k1))[None, None, :]
+    jj = np.arange(space_length, dtype=np.float64)[None, :, None] - cy
+    c, sn = np.cos(np.deg2rad(angle_deg)), np.sin(np.deg2rad(angle_deg))
+    out = np.empty((space_length, space_length, depth), dtype=dtype, order="F")
+    for s in range(0, space_length, slab):
+        ii = np.arange(s, min(s + slab, space_length), dtype=np.float64)[:, None, None] - cx
+        u = np.abs(c * ii + sn * jj)             # coordinates in the box's own frame
+        v = np.abs(-sn * ii + c * jj)
+        ox, oy, oz = np.maximum(u - hx, 0.0), np.maximum(v - hy, 0.0), np.maximum(wz - hz, 0.0)
+        outside = np.sqrt(ox * ox + oy * oy + oz * oz)
+        inside = np.minimum(np.minimum(hx - u, hy - v), hz - wz)
+        out[s:s + slab] = np.where(outside > 0, -outside, inside)
+    return out
+
+
 def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, dtype=np.float64, slab: int = 24,
                     rec_z: int | None = None):
     """Signed distance of the initial box, computed analytically (no mask volume, no EDT).

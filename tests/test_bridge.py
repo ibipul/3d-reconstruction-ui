@@ -146,3 +146,40 @@ def test_initial_box_size_is_adjustable():
     assert _box_extent(wide)[0] > _box_extent(small)[0] and _box_extent(wide)[1] > _box_extent(small)[1]
     assert _box_extent(wide)[2] == _box_extent(small)[2]                 # same height
     assert json.loads(bridge.step(wide, 2))["collapsed"] is None
+
+
+def test_rotated_box_is_the_same_box_at_angle_zero():
+    from recon3d import levelset as ls
+    for args in ((64, 34, 13, 4), (100, 54, 20, 7), (150, 80, 30, 10)):
+        a = ls.initial_box_phi(*args)
+        b = ls.rotated_box_phi(*args, 0.0)
+        assert a.shape == b.shape and ((a >= 0) == (b >= 0)).all()
+        assert np.allclose(a[a >= 0], b[a >= 0])                      # inside: distance to the faces, to the voxel
+
+
+def test_box_angle_turns_the_box():
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(6).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8).tobytes()
+    a = bridge.init_solver(None, n, rows, cols, 64, 0.0, 0, photos, box=(20, 60, 30))
+    b = bridge.init_solver(None, n, rows, cols, 64, 0.0, 0, photos, box=(20, 60, 30), box_angle=90.0)
+    ea, eb = _box_extent(a), _box_extent(b)
+    assert abs(ea[0] - eb[1]) <= 1 and abs(ea[1] - eb[0]) <= 1 and ea[2] == eb[2]
+    assert abs(int((a.phi >= 0).sum()) - int((b.phi >= 0).sum())) <= 0.12 * int((a.phi >= 0).sum())   # same volume
+
+
+def test_camera_height_lifts_the_cameras():
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(7).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8).tobytes()
+    flat = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos)
+    up = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos, camera_height=60.0)
+    assert flat.views[0]["loc"][2] == 0.0 and np.allclose(up.views[0]["loc"][:2], flat.views[0]["loc"][:2])
+    assert np.isclose(up.views[0]["loc"][2], -60.0)                  # world z points down, so above is negative
+    assert json.loads(bridge.step(up, 2))["collapsed"] is None
+
+
+def test_preview_shows_the_starting_surface_without_a_run():
+    n, rows, cols = 36, 54, 80
+    outlines, mesh = bridge.preview(n, rows, cols, 40, 130.0, 160.0, (20, 60, 80), 30.0, 10.0)
+    o = np.frombuffer(outlines, np.float32)
+    assert o.size > 2 * n and np.isfinite(o).all() and o[0] > 0          # a first view with a phi outline
+    assert np.frombuffer(mesh[:8], np.int32)[1] > 0                      # and some triangles

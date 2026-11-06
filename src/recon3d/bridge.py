@@ -13,7 +13,7 @@ from .data import gt_mask_from_gray
 from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
-def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None):
+def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
     and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
     required and the metrics that compare against the ground truth are None.
@@ -21,6 +21,8 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     `focal` (pixels) and `distance` (camera distance from the object in world units, default 160) are free
     parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
     `box` is the initial surface, an (x, y, z) size in voxels at grid 150 (scaled with the grid); default: the MATLAB box.
+    `box_angle` turns that box about the vertical axis (degrees). `camera_height` raises the cameras above the ring
+    plane (world units, positive = above the object).
 
     As in loader_wt_control_rec_error_trace.m, the observed image is the ground truth plus salt &
     pepper noise of density `noise`. If `photo_bytes` (n * rows * cols * 3 uint8 RGB) is given, the
@@ -45,6 +47,8 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
         cfg.focal = float(focal)
     if box is not None:
         cfg.init_box = tuple(float(b) for b in box)
+        cfg.init_box_angle = float(box_angle)
+    cfg.camera_height = float(camera_height)
     if distance is not None:
         cfg.camera_dist = float(distance) / (4.0 * cfg.loc_scale)     # camera_dist 4 <-> 160 world units
     solver = Solver(images, masks, cfg)
@@ -105,6 +109,24 @@ def export_model(solver, fmt, hat=False):
     return meshio.write(fmt, verts, normals, tris, comment)
 
 
+def _outline_parts(solver):
+    parts = []
+    for v in range(solver.n_views):
+        for hat in (False, True):
+            seg = solver.outline_segments(v, hat)
+            parts += [np.array([len(seg)], np.float32), seg.ravel()]
+    return np.concatenate(parts).astype(np.float32).tobytes()
+
+
+def preview(n, rows, cols, grid, focal, distance, box, box_angle, camera_height):
+    """The starting surface as outlines in every view plus its mesh, without photos or a run: a cheap look at the
+    camera and initial-box settings while they are being tuned. Done at a coarse `grid`; the box has the same size
+    in world units at any grid, so it matches the real run up to voxel rounding. Returns (outlines, mesh) bytes."""
+    blank = np.zeros(n * rows * cols * 3, np.uint8).tobytes()
+    s = init_solver(None, n, rows, cols, grid, 0.0, 0, blank, focal, distance, box, box_angle, camera_height)
+    return _outline_parts(s), _mesh_bytes(s.surface_mesh(False))
+
+
 def snapshot(solver):
     """(outlines, mesh, mesh_hat) as bytes.
 
@@ -112,10 +134,4 @@ def snapshot(solver):
     segments in pixel-centre coordinates. A mesh is int32 [n_vertices, n_triangles] followed by
     float32 vertices (n,3), float32 normals (n,3) and uint32 triangles (m,3).
     """
-    parts = []
-    for v in range(solver.n_views):
-        for hat in (False, True):
-            seg = solver.outline_segments(v, hat)
-            parts += [np.array([len(seg)], np.float32), seg.ravel()]
-    outlines = np.concatenate(parts).astype(np.float32)
-    return (outlines.tobytes(), _mesh_bytes(solver.surface_mesh(False)), _mesh_bytes(solver.surface_mesh(True)))
+    return (_outline_parts(solver), _mesh_bytes(solver.surface_mesh(False)), _mesh_bytes(solver.surface_mesh(True)))
