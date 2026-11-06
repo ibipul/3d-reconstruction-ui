@@ -1,13 +1,11 @@
 {
- "dataset": "sentinel_polar",
  "samples": [
   {
    "file": "dataset25-sentinel-strokes-minimal.json",
    "title": "dataset25 sentinel (minimal)",
    "description": "290 strokes (95 inside, 195 outside) on all 36 views: 177 at the start and 113 more between iterations 152 and 1099. Recorded with RGB photos input, smoothing 0.398 and re-init every 5 / step 0.5, at grid 300. Plug in adds it to the current run; Play re-initialises with those settings and replays it.",
    "strokes": 290,
-   "default": true,
-   "dataset": "sentinel_polar"
+   "default": true
   }
  ]
 }

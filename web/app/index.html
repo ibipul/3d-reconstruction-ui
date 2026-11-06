@@ -187,7 +187,7 @@ input[type=range] { accent-color: var(--accent); }
     <button class="btn mini" id="s-replay" type="button" title="Re-initialise and re-apply your current strokes at the iterations they were drawn at">Re-run</button>
     <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
     <span class="brk" id="s-brk"></span>
-    <select id="s-sample" aria-label="Interaction replay" title="Interaction replays recorded for this dataset (data/strokes/)"><option value="">interaction replay…</option></select>
+    <select id="s-sample" aria-label="Interaction replay" title="Interaction replays recorded for this dataset (data/&lt;dataset&gt;/strokes/)"><option value="">interaction replay…</option></select>
     <label title="Iteration to plug the interaction replay in at. Empty means now; the replay's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
     <label title="Apply every stroke immediately instead of at the iteration it was drawn at. Timing recorded on one grid size does not carry over exactly to another, so this is the safe choice for a different grid."><input type="checkbox" id="s-once" checked> all at once</label>
     <button class="btn mini" id="s-plug" type="button" title="Add the chosen interaction replay to the current run">Plug in</button>
@@ -748,14 +748,14 @@ input[type=range] { accent-color: var(--accent); }
   };
 
   /* ---------- interaction replays shipped with the dataset ---------- */
-  var plugQueue = [], samples = [], allSamples = [];
+  var plugQueue = [], samples = [];
   function loadManifest() {
-    fetch('data/strokes/manifest.json').then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
-      allSamples = m.samples || [];
-    }).catch(function () { allSamples = []; }).then(populateSamples);
+    var token = loadToken;
+    fetch('data/' + ds.dir + '/strokes/manifest.json').then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
+      return m.samples || [];
+    }).catch(function () { return []; }).then(function (list) { if (token === loadToken) { samples = list; populateSamples(); } });
   }
-  function populateSamples() {                                  // only the replays recorded on the current dataset
-    samples = allSamples.filter(function (x) { return (x.dataset || 'sentinel_polar') === ds.id; });
+  function populateSamples() {                                  // the replays that ship with the current dataset (data/<dataset>/strokes/)
     var sel = $('s-sample'); sel.textContent = ''; sel.appendChild(new Option('interaction replay…', ''));
     samples.forEach(function (s) {
       var o = document.createElement('option'); o.value = s.file; o.textContent = s.title + ' (' + s.strokes + ')'; o.title = s.description; if (s.default) o.selected = true; sel.appendChild(o);
@@ -778,7 +778,7 @@ input[type=range] { accent-color: var(--accent); }
     if (!file) { showInfo('choose an interaction replay first'); return; }
     if (!ready) { showInfo('wait for the solver to be ready'); return; }
     var at = $('s-at').value, base = at === '' ? curIter() : Math.max(0, parseInt(at, 10) || 0);
-    fetch('data/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
+    fetch('data/' + ds.dir + '/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
       var meta = samples.filter(function (x) { return x.file === file; })[0] || {};
       var sess = importSession(obj), title = meta.title || obj.title || file;
       sess.strokes.forEach(function (st) { plugQueue.push({ view: st.view, type: st.type, size: st.size, iter: base + ($('s-once').checked ? 0 : st.iter), pts: st.pts }); });
@@ -791,7 +791,7 @@ input[type=range] { accent-color: var(--accent); }
     var file = $('s-sample').value;
     if (!file) { showInfo('choose an interaction replay first'); return; }
     if (!booted) { showInfo('wait for the solver to start'); return; }
-    fetch('data/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
+    fetch('data/' + ds.dir + '/strokes/' + file).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (obj) {
       var meta = samples.filter(function (x) { return x.file === file; })[0] || {};
       var sess = importSession(obj), title = meta.title || obj.title || file;
       var settings = sess.settings ? JSON.parse(JSON.stringify(sess.settings)) : null, recordedGrid = settings && settings.grid;
@@ -836,7 +836,7 @@ input[type=range] { accent-color: var(--accent); }
     fc.width = W * 2; fc.height = H * 2;
     $('dataset').value = id; $('distance').value = d.distance || 160; $('ds-note').textContent = d.note || '';
     try { var u = new URL(location.href); u.searchParams.set('dataset', id); history.replaceState(null, '', u); } catch (e) { /* not essential */ }
-    setGTControls(); buildGrid(); populateSamples(); showMetrics(); drawPlot(); requestRender(); showInfo('');
+    setGTControls(); buildGrid(); samples = []; populateSamples(); loadManifest(); showMetrics(); drawPlot(); requestRender(); showInfo('');
     setStatus('Loading images…');
     var base = 'data/' + d.dir + '/', jobs = [];
     for (var li = 1; li <= N; li++) {
@@ -859,7 +859,6 @@ input[type=range] { accent-color: var(--accent); }
 
   /* ---------- boot ---------- */
   window.reconApp = { exportSession: exportSession, importSession: importSession };
-  loadManifest();
   setStatus('Loading images…');
   // Fetch the worker with revalidation (and start it from a blob), so an updated site is never run with an old cached worker.
   var srcBase = new URL('../../src/recon3d/', location.href).href;

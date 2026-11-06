@@ -1,4 +1,4 @@
-"""The interaction replays shipped in web/app/data/strokes/ are valid for the dataset they are listed for."""
+"""The interaction replays shipped in web/app/data/<dataset>/strokes/ are valid for the dataset they are listed for."""
 import json
 import os
 
@@ -7,7 +7,7 @@ import pytest
 
 from recon3d import export
 
-STROKES = os.path.join(os.path.dirname(__file__), "..", "web", "app", "data", "strokes")
+STROKES = os.path.join(os.path.dirname(__file__), "..", "web", "app", "data", "sentinel_polar", "strokes")
 MANIFEST = os.path.join(STROKES, "manifest.json")
 
 pytestmark = pytest.mark.skipif(not os.path.exists(MANIFEST), reason="no interaction replays shipped")

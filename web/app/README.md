@@ -30,7 +30,7 @@ The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the pho
 Every dataset uses the same camera ring as the MATLAB code (level cameras, 10° steps). **Distance** is the
 camera distance in world units (160 for sentinel_polar). It is a free parameter: it sets how large the object looks
 next to the initial surface, so tune it per dataset by trial and error, then *Re-initialise*. Interaction replays
-are listed per dataset (`dataset` in `data/strokes/manifest.json`); a strokes file drawn on one dataset is refused on another.
+ship with their dataset (`data/<dataset>/strokes/` and its `manifest.json`; zebra has none, so its replay controls are hidden); a strokes file drawn on one dataset is refused on another.
 To add a dataset, put `photos/1..N.<ext>` (and `gt/1..N.png` if it has ground truth) in `data/<name>/` and add an entry to `datasets.json`.
 
 ## What you see
@@ -69,7 +69,7 @@ the iteration, e.g. `recon-100grid-120it-phi.obj`. The same files can be written
 
 ## Interaction replay
 
-`data/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the
+`data/sentinel_polar/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the
 **Strokes** row): a hand-drawn session on `dataset25` (the sentinel), 290 strokes (95 inside, 195 outside) on all 36 views, 177 of
 them at the start and 113 more between iterations 152 and 1099. It was recorded with the **RGB photos** as input, smoothing 0.398
 and the loader's re-initialisation (every 5, step 0.5), at grid 300.
@@ -82,7 +82,7 @@ and the loader's re-initialisation (every 5, step 0.5), at grid 300.
 - **Clear all** removes every stroke. **Re-run** (next to Save and Load) re-initialises and re-applies *your own* strokes at the
   iterations you drew them at. Plugged and played strokes are saved and re-run like hand-drawn ones.
 
-To add another replay, save a session from the app (**Save**), drop the file into `data/strokes/` and list it in `manifest.json`.
+To add another replay, save a session from the app (**Save**), drop the file into the dataset's `strokes/` folder and list it in `manifest.json`.
 
 Strokes are in image pixels, so a replay recorded at one grid size plugs into a run at any other. The timing does not carry over
 exactly, though: a coarser grid evolves faster per iteration, and not by a fixed ratio (in a test, a 3x coarser run matched the fine
