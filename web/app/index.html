@@ -57,6 +57,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .bar h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: .01em; }
 .chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); }
 .group { display: flex; align-items: center; gap: 6px; }
+.group.strokes { flex: 1 1 100%; flex-wrap: wrap; gap: 8px 6px; }
+.group.strokes .brk { flex-basis: 100%; height: 0; }
 .btn { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; min-height: 32px; }
 .btn:hover { background: var(--surface-2); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
@@ -81,7 +83,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .card:hover { border-color: var(--accent); }
 .card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.card canvas { width: 100%; height: auto; aspect-ratio: 200 / 320; display: block; border-radius: 4px; background: var(--surface-2); }
+.card canvas { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--surface-2); }
 .card .meta { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; gap: 6px; }
 .card .meta .n { font-weight: 600; }
 .card .meta .ang { color: var(--muted); font-size: 11px; }
@@ -168,6 +170,9 @@ input[type=range] { accent-color: var(--accent); }
 </header>
 
 <div class="setup">
+  <label title="Which photo set to reconstruct. Only sentinel_polar has ground-truth silhouettes; for the others the IoU / error numbers are not available.">Dataset <select id="dataset" aria-label="Dataset"></select></label>
+  <label title="Camera distance from the object, in world units (sentinel_polar: 160). It sets how big the object looks compared with the initial surface, so adjust it per dataset by trial and error, then Re-initialise.">Distance <input type="number" id="distance" value="160" min="40" max="1000" step="5" style="width:5em"></label>
+  <span class="note" id="ds-note" style="flex-basis:100%"></span>
   <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt">silhouettes + noise (loader)</option><option value="photo" selected>RGB photos</option></select></label>
   <label>Grid <select id="grid-n"><option value="64">64³</option><option value="100">100³</option><option value="150" selected>150³ (MATLAB)</option><option value="200">200³ (slower)</option><option value="300">300³ (slow, ~1 GB)</option></select></label>
   <label>Noise <input type="range" id="noise" min="0" max="0.95" step="0.05" value="0"> <span id="noise-v" class="mono">0.00</span></label>
@@ -175,17 +180,18 @@ input[type=range] { accent-color: var(--accent); }
   <label title="Weight of the mean-curvature (smoothing) term. The MATLAB loader uses 0.001; this page starts at 0.04.">Smoothing <input type="range" id="smooth" min="0" max="3.5" step="any" value="1.60206"> <span id="smooth-v" class="mono">0.04</span></label>
   <label title="How often the level set is re-initialised to a distance function (Sussman), and the size of each correction. The MATLAB loader uses every 5 iterations with step 0.5; that schedule makes the shape pulse. Every 10 with step 0.05 is smooth.">Re-init <select id="reinit-every" aria-label="Re-initialise every N iterations"><option value="1">every 1</option><option value="2">every 2</option><option value="5" selected>every 5 (loader)</option><option value="10">every 10</option><option value="20">every 20</option><option value="50">every 50</option><option value="1000000000">never</option></select> <select id="reinit-dt" aria-label="Re-initialisation step"><option value="0.5">step 0.5 (loader)</option><option value="0.25" selected>step 0.25</option><option value="0.1">step 0.1</option><option value="0.05">step 0.05</option></select></label>
   <label>Show <select id="src"><option value="photo">Photo</option><option value="input" selected>Solver input</option><option value="gt">Ground truth</option></select></label>
-  <span class="group" role="group" aria-label="Strokes">
+  <span class="group strokes" role="group" aria-label="Strokes">
     <span>Strokes</span>
     <button class="btn mini" id="s-save" type="button" title="Download all strokes, with the iteration each was drawn at, as a JSON file">Save</button>
     <button class="btn mini" id="s-load" type="button" title="Load a saved strokes file onto the views">Load</button>
     <button class="btn mini" id="s-replay" type="button" title="Re-initialise and re-apply your current strokes at the iterations they were drawn at">Re-run</button>
+    <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
+    <span class="brk" id="s-brk"></span>
     <select id="s-sample" aria-label="Interaction replay" title="Interaction replays recorded for this dataset (data/strokes/)"><option value="">interaction replay…</option></select>
     <label title="Iteration to plug the interaction replay in at. Empty means now; the replay's own timing is added to it.">at <input type="number" id="s-at" min="0" step="1" placeholder="now" style="width:5em"></label>
     <label title="Apply every stroke immediately instead of at the iteration it was drawn at. Timing recorded on one grid size does not carry over exactly to another, so this is the safe choice for a different grid."><input type="checkbox" id="s-once" checked> all at once</label>
     <button class="btn mini" id="s-plug" type="button" title="Add the chosen interaction replay to the current run">Plug in</button>
     <button class="btn mini" id="s-play" type="button" title="Re-initialise with the settings the replay was recorded with (input, smoothing, re-init schedule; your grid is kept) and play it from the start">Play</button>
-    <button class="btn mini" id="s-clearall" type="button" title="Remove every stroke from every view">Clear all</button>
     <input type="file" id="s-file" accept="application/json,.json" hidden>
     <span class="mono" id="s-info"></span>
   </span>
@@ -264,10 +270,11 @@ input[type=range] { accent-color: var(--accent); }
 
 <script>
 (function () {
-  var N = 36, W = 200, H = 320, ROWS = H;
+  var N = 36, W = 200, H = 320, ds = null, hasGT = true;       // set per dataset by loadDataset()
+  var datasets = [], datasetById = {};
   var $ = function (id) { return document.getElementById(id); };
   var css = function (v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
-  var angle = function (i) { return i * 10 + 3; };
+  var angle = function (i) { return ds.angleStart + i * ds.angleStep; };
 
   if (location.protocol === 'file:') {
     $('status').textContent = 'Serve this folder over HTTP (see web/app/README.md)';
@@ -276,12 +283,12 @@ input[type=range] { accent-color: var(--accent); }
   }
 
   var photo = [], inputC = [], gtC = [], gtGray = [];
-  var strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
+  var strokes = [];
   var outPhi = [], outHat = [];
   var mesh = null, meshHat = null;
   var hist = null, tool = null, brush = 6, cur = -1, sel = -1, srcMode = 'input';
   var showPhi = true, showHat = true, showCams = true, showHatMesh = false;
-  var worker = null, booted = false, ready = false, busy = false, running = false, gen = 0;
+  var worker = null, booted = false, imagesReady = false, ready = false, busy = false, running = false, gen = 0;
   var cardCanvas = [], cardMarks = [], cardEl = [];
 
   function setStatus(t, bad) { var s = $('status'); s.textContent = t; s.style.color = bad ? 'var(--mark-out)' : ''; }
@@ -392,15 +399,18 @@ input[type=range] { accent-color: var(--accent); }
 
   /* ---------- grid ---------- */
   function markSel() { cardEl.forEach(function (c, i) { c.classList.toggle('sel', i === sel); }); $('vp-sel').textContent = sel >= 0 ? 'view ' + (sel + 1) + ' · ' + angle(sel) + '°' : 'view –'; requestRender(); }
+  function buildGrid() {
+    $('grid').textContent = ''; cardCanvas = []; cardMarks = []; cardEl = [];
   for (var gi = 0; gi < N; gi++) {
-    (function (i) {
-      var b = document.createElement('button'); b.className = 'card'; b.type = 'button'; b.setAttribute('aria-label', 'Open view ' + (i + 1));
-      b.innerHTML = '<canvas width="' + W + '" height="' + H + '"></canvas><div class="meta"><span class="n mono">' + (i + 1) + '</span><span class="ang mono">' + angle(i) + '°</span></div><div class="marks"></div>';
-      cardCanvas[i] = b.firstChild; cardMarks[i] = b.lastChild; cardEl[i] = b;
-      b.addEventListener('click', function () { openFocus(i); });
-      b.addEventListener('pointerenter', function () { if (cur < 0) { sel = i; markSel(); } });
-      $('grid').appendChild(b);
-    })(gi);
+      (function (i) {
+        var b = document.createElement('button'); b.className = 'card'; b.type = 'button'; b.setAttribute('aria-label', 'Open view ' + (i + 1));
+        b.innerHTML = '<canvas width="' + W + '" height="' + H + '"></canvas><div class="meta"><span class="n mono">' + (i + 1) + '</span><span class="ang mono">' + angle(i) + '°</span></div><div class="marks"></div>';
+        cardCanvas[i] = b.firstChild; cardMarks[i] = b.lastChild; cardEl[i] = b;
+        b.addEventListener('click', function () { openFocus(i); });
+        b.addEventListener('pointerenter', function () { if (cur < 0) { sel = i; markSel(); } });
+        $('grid').appendChild(b);
+      })(gi);
+    }
   }
 
   /* ---------- 3D viewport: the zero level set as a shaded surface ---------- */
@@ -503,7 +513,7 @@ input[type=range] { accent-color: var(--accent); }
     vctx.globalAlpha = 1;
     if (showPhi) drawSurface(mesh, S, cx, cy, css('--phi'));
     if (showHat && showHatMesh) drawWire(meshHat, S, cx, cy, css('--phi-hat'));
-    if (showCams) {
+    if (showCams && ds) {
       for (var i = 0; i < N; i++) {
         var t = angle(i) * Math.PI / 180, c3 = pr(1.3 * Math.cos(t), 1.3 * Math.sin(t), 0, S, cx, cy), on = i === sel;
         if (on) { vctx.strokeStyle = css('--accent'); vctx.lineWidth = 2 * px; vctx.beginPath(); vctx.moveTo(c3[0], c3[1]); vctx.lineTo(cx, cy); vctx.stroke(); }
@@ -516,6 +526,7 @@ input[type=range] { accent-color: var(--accent); }
 
   /* ---------- plot ---------- */
   function seriesValue(r, key) {
+    if (r.tp === null || r.tp === undefined) { if (key === 'iou' || key === 'err' || key === 'rms') return null; }   // no ground truth
     if (key === 'iou') return r.tp / Math.max(r.tp + r.fp + r.fn, 1);
     if (key === 'err') return r.fp + r.fn;
     return r[key];
@@ -577,7 +588,7 @@ input[type=range] { accent-color: var(--accent); }
     if (m.gen !== undefined && m.gen !== gen) return;   // reply to a superseded init
     if (m.type === 'init') {
       var inp = new Uint8Array(m.inputs), gts = new Uint8Array(m.gts);
-      for (var i = 0; i < N; i++) { inputC[i] = m.channels === 3 ? rgbCanvas(inp, i * W * H * 3) : grayCanvas(inp, i * W * H, function (v) { return v; }); gtC[i] = grayCanvas(gts, i * W * H, function (v) { return v ? 255 : 0; }); }
+      for (var i = 0; i < N; i++) { inputC[i] = m.channels === 3 ? rgbCanvas(inp, i * W * H * 3) : grayCanvas(inp, i * W * H, function (v) { return v; }); gtC[i] = hasGT ? grayCanvas(gts, i * W * H, function (v) { return v ? 255 : 0; }) : null; }
       onSnapshot(m); hist = []; ready = true; busy = false;
       for (var v = 0; v < N; v++) if (strokes[v].length) sendStrokes(v);
       sendSmooth(); sendReinit();
@@ -599,20 +610,22 @@ input[type=range] { accent-color: var(--accent); }
     if (!r) { $('r-iter').textContent = '0'; $('r-e').textContent = '–'; $('s-iou').textContent = $('s-fpfn').textContent = $('s-vox').textContent = '–'; return; }
     $('r-iter').textContent = r.iter; $('r-e').textContent = r.energy.toFixed(1);
     if (ms) $('r-ms').textContent = Math.round(ms) + ' ms/iter';
-    $('s-iou').textContent = seriesValue(r, 'iou').toFixed(3); $('s-fpfn').textContent = r.fp + ' / ' + r.fn; $('s-vox').textContent = r.voxels.toLocaleString('en-US');
+    var iou = seriesValue(r, 'iou');
+    $('s-iou').textContent = iou === null ? 'n/a' : iou.toFixed(3); $('s-fpfn').textContent = r.fp === null ? 'n/a' : r.fp + ' / ' + r.fn; $('s-vox').textContent = r.voxels.toLocaleString('en-US');
   }
   function requestStep() { if (!ready || busy) return; if (replayQueue.length) applyDue(); if (plugQueue.length) applyPlug(); busy = true; worker.postMessage({ cmd: 'step', k: 1, gen: gen }); }
   function stop() { running = false; $('run').textContent = 'Run'; }
   $('run').onclick = function () { if (running) { stop(); } else { running = true; $('run').textContent = 'Pause'; setStatus('Running…'); requestStep(); } };
   $('step').onclick = function () { if (!running) requestStep(); };
   function maybeInit() {
-    if (!booted || !gtGray.length) return;
+    if (!booted || !imagesReady) return;
     stop(); ready = false; busy = true; gen++; hist = null; plugQueue = []; if (!pendingReplay) { replayQueue = []; replayTotal = 0; }
     $('run').disabled = $('step').disabled = $('reset').disabled = true; $('model-save').disabled = true;
     setStatus('Building the volume…');
-    var all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H);
-    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value };
-    if ($('source').value === 'photo') msg.photos = photoBytes();
+    var all = null;
+    if (hasGT) { all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H); }
+    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, focal: ds.focal, distance: +$('distance').value || 160 };
+    if ($('source').value === 'photo' || !hasGT) msg.photos = photoBytes();
     worker.postMessage(msg);
   }
   $('reset').onclick = maybeInit;
@@ -644,7 +657,7 @@ input[type=range] { accent-color: var(--accent); }
   }
   function exportSession() {
     return {
-      format: 'recon3d-strokes', version: 1,
+      format: 'recon3d-strokes', version: 1, dataset: ds.id,
       image: { rows: H, cols: W },
       settings: { grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, curvature_weight: smoothWeight(), source: $('source').value, reinit_every: +$('reinit-every').value, reinit_dt: +$('reinit-dt').value },
       note: 'view is 0-based; pts are [x (column), y (row)] in image pixels; iter is the iteration count when the stroke was drawn; type in = inside (+), out = outside (-)',
@@ -653,6 +666,8 @@ input[type=range] { accent-color: var(--accent); }
   }
   function importSession(obj) {
     if (!obj || obj.format !== 'recon3d-strokes' || !Array.isArray(obj.strokes)) throw new Error('Not a recon3d strokes file');
+    if (obj.dataset && obj.dataset !== ds.id) throw new Error('these strokes were drawn on ' + obj.dataset + ', not ' + ds.id);
+    if (obj.image && (obj.image.rows !== H || obj.image.cols !== W)) throw new Error('these strokes are for ' + obj.image.cols + '×' + obj.image.rows + ' images, this dataset is ' + W + '×' + H);
     var list = obj.strokes.map(function (st, i) {
       if (!(st.view >= 0 && st.view < N) || (st.type !== 'in' && st.type !== 'out') || !Array.isArray(st.pts) || !st.pts.length)
         throw new Error('Stroke ' + (i + 1) + ' is not valid');
@@ -667,7 +682,8 @@ input[type=range] { accent-color: var(--accent); }
     if (st.grid) { $('grid-n').value = String(st.grid); }
     if (st.noise !== undefined) setControl('noise', st.noise);
     if (st.seed !== undefined) $('seed').value = st.seed;
-    if (st.source && $('source').querySelector('option[value="' + st.source + '"]')) $('source').value = st.source;
+    var so = st.source && $('source').querySelector('option[value="' + st.source + '"]');
+    if (so && !so.disabled) $('source').value = st.source;
     if (st.reinit_every && $('reinit-every').querySelector('option[value="' + st.reinit_every + '"]')) $('reinit-every').value = String(st.reinit_every);
     if (st.reinit_dt && $('reinit-dt').querySelector('option[value="' + st.reinit_dt + '"]')) $('reinit-dt').value = String(st.reinit_dt);
     if (st.curvature_weight) { setControl('smooth', Math.max(0, Math.min(3.5, Math.log10(st.curvature_weight) + 3)).toFixed(1)); }
@@ -732,15 +748,20 @@ input[type=range] { accent-color: var(--accent); }
   };
 
   /* ---------- interaction replays shipped with the dataset ---------- */
-  var plugQueue = [], samples = [];
+  var plugQueue = [], samples = [], allSamples = [];
   function loadManifest() {
     fetch('data/strokes/manifest.json').then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
-      samples = m.samples || [];
-      var sel = $('s-sample');
-      samples.forEach(function (s) {
-        var o = document.createElement('option'); o.value = s.file; o.textContent = s.title + ' (' + s.strokes + ')'; o.title = s.description; if (s.default) o.selected = true; sel.appendChild(o);
-      });
-    }).catch(function () { $('s-sample').hidden = $('s-plug').hidden = $('s-at').parentNode.hidden = true; });
+      allSamples = m.samples || [];
+    }).catch(function () { allSamples = []; }).then(populateSamples);
+  }
+  function populateSamples() {                                  // only the replays recorded on the current dataset
+    samples = allSamples.filter(function (x) { return (x.dataset || 'sentinel_polar') === ds.id; });
+    var sel = $('s-sample'); sel.textContent = ''; sel.appendChild(new Option('interaction replay…', ''));
+    samples.forEach(function (s) {
+      var o = document.createElement('option'); o.value = s.file; o.textContent = s.title + ' (' + s.strokes + ')'; o.title = s.description; if (s.default) o.selected = true; sel.appendChild(o);
+    });
+    var none = !samples.length;
+    $('s-brk').hidden = sel.hidden = $('s-plug').hidden = $('s-play').hidden = $('s-at').parentNode.hidden = $('s-once').parentNode.hidden = none;
   }
   function applyPlug() {
     var it = curIter(), touched = {}, n = 0;
@@ -788,30 +809,69 @@ input[type=range] { accent-color: var(--accent); }
     plugQueue = []; replayQueue = []; replayTotal = 0; refreshAll(); showInfo('all strokes cleared');
   };
 
-  /* ---------- boot ---------- */
+  /* ---------- datasets ---------- */
   function loadImg(url) { return new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error('Missing ' + url)); }; im.src = url; }); }
-  var jobs = [];
-  for (var li = 1; li <= N; li++) {
-    (function (i) {
-      jobs.push(loadImg('data/photos/' + i + '.png').then(function (im) { var c = document.createElement('canvas'); c.width = W; c.height = H; c.getContext('2d').drawImage(im, 0, 0, W, H); photo[i - 1] = c; }));
-      jobs.push(loadImg('data/gt/' + i + '.png').then(function (im) {
-        var c = document.createElement('canvas'); c.width = W; c.height = H; var x = c.getContext('2d'); x.drawImage(im, 0, 0, W, H);
-        var d = x.getImageData(0, 0, W, H).data, g = new Uint8Array(W * H); for (var p = 0; p < W * H; p++) g[p] = d[p * 4]; gtGray[i - 1] = g;
-      }));
-    })(li);
+  function setGTControls() {                                     // ground-truth views and numbers only exist with ground truth
+    var why = 'needs ground-truth silhouettes, which this dataset does not have';
+    [['source', 'gt'], ['src', 'gt'], ['series', 'iou'], ['series', 'err'], ['series', 'rms']].forEach(function (p) {
+      var o = $(p[0]).querySelector('option[value="' + p[1] + '"]'); o.disabled = o.hidden = !hasGT; o.title = hasGT ? '' : why;
+    });
+    if (!hasGT) {
+      if ($('source').value === 'gt') $('source').value = 'photo';
+      if (srcMode === 'gt') { srcMode = 'input'; $('src').value = 'input'; }
+      if (['iou', 'err', 'rms'].indexOf($('series').value) >= 0) $('series').value = 'energy';
+    }
+    $('s-iou').title = $('s-fpfn').title = hasGT ? '' : why;
   }
+  var loadToken = 0;
+  function loadDataset(id) {
+    var d = datasetById[id]; if (!d) return Promise.reject(new Error('Unknown dataset ' + id));
+    var token = ++loadToken;
+    stop(); ready = false; busy = true; imagesReady = false; gen++; hist = null; plugQueue = []; replayQueue = []; replayTotal = 0; pendingReplay = false;
+    $('run').disabled = $('step').disabled = $('reset').disabled = true; $('model-save').disabled = true;
+    ds = d; N = d.views; W = d.width; H = d.height; hasGT = !!d.gt;
+    photo = []; inputC = []; gtC = []; gtGray = []; photoRGB = null; outPhi = []; outHat = []; mesh = meshHat = null;
+    strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
+    cur = -1; sel = -1; $('focus').hidden = true;
+    fc.width = W * 2; fc.height = H * 2;
+    $('dataset').value = id; $('distance').value = d.distance || 160; $('ds-note').textContent = d.note || '';
+    try { var u = new URL(location.href); u.searchParams.set('dataset', id); history.replaceState(null, '', u); } catch (e) { /* not essential */ }
+    setGTControls(); buildGrid(); populateSamples(); showMetrics(); drawPlot(); requestRender(); showInfo('');
+    setStatus('Loading images…');
+    var base = 'data/' + d.dir + '/', jobs = [];
+    for (var li = 1; li <= N; li++) {
+      (function (i) {
+        jobs.push(loadImg(base + 'photos/' + i + '.' + d.photoExt).then(function (im) { var c = document.createElement('canvas'); c.width = W; c.height = H; c.getContext('2d').drawImage(im, 0, 0, W, H); photo[i - 1] = c; }));
+        if (hasGT) jobs.push(loadImg(base + 'gt/' + i + '.png').then(function (im) {
+          var c = document.createElement('canvas'); c.width = W; c.height = H; var x = c.getContext('2d'); x.drawImage(im, 0, 0, W, H);
+          var dd = x.getImageData(0, 0, W, H).data, g = new Uint8Array(W * H); for (var p = 0; p < W * H; p++) g[p] = dd[p * 4]; gtGray[i - 1] = g;
+        }));
+      })(li);
+    }
+    return Promise.all(jobs).then(function () {
+      if (token !== loadToken) return;                           // another dataset was chosen meanwhile
+      imagesReady = true;
+      for (var i = 0; i < N; i++) refreshCard(i);
+      maybeInit();
+    }).catch(function (err) { if (token === loadToken) setStatus(err.message + ' (run scripts/fetch_data.sh)', true); });
+  }
+  $('dataset').onchange = function (e) { loadDataset(e.target.value); };
+
+  /* ---------- boot ---------- */
   window.reconApp = { exportSession: exportSession, importSession: importSession };
   loadManifest();
   setStatus('Loading images…');
-  Promise.all(jobs).then(function () {
-    for (var i = 0; i < N; i++) refreshCard(i);
-    // Fetch the worker with revalidation (and start it from a blob), so an updated site is never run with an old cached worker.
-    var srcBase = new URL('../../src/recon3d/', location.href).href;
-    fetch('worker.js', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('worker.js: HTTP ' + r.status); return r.text(); }).then(function (code) {
-      worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))); worker.onmessage = onMsg;
-      worker.onerror = function (e) { setStatus('Worker error: ' + e.message, true); };
-      worker.postMessage({ cmd: 'boot', srcBase: srcBase });
-    }).catch(function (err) { setStatus(err.message, true); });
-  }).catch(function (err) { setStatus(err.message + ' (run scripts/fetch_data.sh)', true); });
+  // Fetch the worker with revalidation (and start it from a blob), so an updated site is never run with an old cached worker.
+  var srcBase = new URL('../../src/recon3d/', location.href).href;
+  fetch('worker.js', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('worker.js: HTTP ' + r.status); return r.text(); }).then(function (code) {
+    worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))); worker.onmessage = onMsg;
+    worker.onerror = function (e) { setStatus('Worker error: ' + e.message, true); };
+    worker.postMessage({ cmd: 'boot', srcBase: srcBase });
+  }).catch(function (err) { setStatus(err.message, true); });
+  fetch('data/datasets.json').then(function (r) { if (!r.ok) throw new Error('data/datasets.json: HTTP ' + r.status); return r.json(); }).then(function (m) {
+    datasets = m.datasets; datasets.forEach(function (d) { datasetById[d.id] = d; var o = document.createElement('option'); o.value = d.id; o.textContent = d.title; $('dataset').appendChild(o); });
+    var want = new URLSearchParams(location.search).get('dataset');
+    return loadDataset(datasetById[want] ? want : m['default']);
+  }).catch(function (err) { setStatus(err.message, true); });
 })();
 </script>

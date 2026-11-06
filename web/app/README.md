@@ -18,6 +18,21 @@ Open http://localhost:8000/web/app/. It must be served over HTTP: as a `file://`
 blocks the worker and image decoding. The first load downloads Pyodide, NumPy and SciPy from the
 jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 
+## Datasets
+
+The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the photo sets listed in `data/datasets.json`:
+
+| Dataset | Photos | Ground truth |
+|---|---|---|
+| `sentinel_polar` | 36 synthetic views, 200×320 | yes: IoU, FP/FN and RMS error are shown |
+| `zebra` | 36 real photos, 320×216 | no: the *Silhouettes + noise* input, the *Ground truth* view and the IoU / FP+FN / RMS traces are disabled; energy and Lyapunov remain |
+
+Every dataset uses the same camera ring as the MATLAB code (level cameras, 10° steps). **Distance** is the
+camera distance in world units (160 for sentinel_polar). It is a free parameter: it sets how large the object looks
+next to the initial surface, so tune it per dataset by trial and error, then *Re-initialise*. Interaction replays
+are listed per dataset (`dataset` in `data/strokes/manifest.json`); a strokes file drawn on one dataset is refused on another.
+To add a dataset, put `photos/1..N.<ext>` (and `gt/1..N.png` if it has ground truth) in `data/<name>/` and add an entry to `datasets.json`.
+
 ## What you see
 
 - **Grid:** the 36 views. *Show* switches between the photo, what the solver sees (the *Input* setting:

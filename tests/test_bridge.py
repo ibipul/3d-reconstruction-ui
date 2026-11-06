@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import pytest
 
 from recon3d import bridge
 
@@ -96,3 +97,28 @@ def test_a_vanished_shape_is_reported_not_raised():
     json.loads(bridge.step(s2, 1))
     s2.phi_hat[...] = -1.0                             # the estimate vanishing is reported too
     assert "phi_hat" in json.loads(bridge.step(s2, 2))["collapsed"]
+
+
+def test_dataset_without_ground_truth():
+    """No ground-truth silhouettes (e.g. a real photo set): needs photos, runs, reports no GT metrics."""
+    n, rows, cols = 36, 54, 80                                        # landscape, like the zebra photos
+    photos = np.random.default_rng(2).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8)
+    with pytest.raises(ValueError):
+        bridge.init_solver(None, n, rows, cols, 40, 0.0, 0)
+    s = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos.tobytes(), focal=130.0)
+    inp, gts, ch = bridge.inputs_bytes(s)
+    assert ch == 3 and len(inp) == n * rows * cols * 3 and gts == b""
+    res = json.loads(bridge.step(s, 2))
+    assert res["collapsed"] is None and len(res["metrics"]) == 2
+    for r in res["metrics"]:
+        assert all(r[k] is None for k in ("rms", "tp", "tn", "fp", "fn"))
+        assert np.isfinite(r["energy"]) and np.isfinite(r["lyapunov"])
+    assert s.cfg.focal == 130.0
+
+
+def test_distance_moves_the_cameras():
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(3).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8)
+    a = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos.tobytes())
+    b = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos.tobytes(), distance=240.0)
+    assert np.isclose(np.linalg.norm(a.views[0]["loc"]), 160.0) and np.isclose(np.linalg.norm(b.views[0]["loc"]), 240.0)

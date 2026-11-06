@@ -67,7 +67,7 @@ And the software:
 python3 -m venv .venv && .venv/bin/pip install numpy scipy pytest pillow
 PYTHONPATH=src .venv/bin/python -m pytest -q tests
 
-# the web app (the two datasets are committed in web/app/data/; scripts/fetch_data.sh refreshes them)
+# the web app (the datasets are committed in web/app/data/<dataset>/; scripts/fetch_data.sh refreshes them)
 python3 -m http.server 8000      # then open http://localhost:8000/web/app/
 
 # or run the solver natively and print metrics
@@ -92,4 +92,4 @@ Licensed under the [Apache License, Version 2.0](LICENSE). The MATLAB implementa
 `3d-reconstruction-ui-matlab` (private), is the original codebase,
 developed by the author during doctoral work.
 
-The two datasets in `web/app/data/` come from that repository.
+The `sentinel_polar` dataset in `web/app/data/` comes from that repository; `zebra` is a set of real photos with no ground truth.

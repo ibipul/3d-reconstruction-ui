@@ -62,12 +62,13 @@ def imnoise_salt_pepper(img, density, rng):
 
 
 class Solver:
-    def __init__(self, images, gt_masks, config: Config | None = None):
+    def __init__(self, images, gt_masks=None, config: Config | None = None):
         """images: list of observed images (2D gray or 3D RGB uint8).
-        gt_masks: list of 2D {0,1} ground-truth silhouettes (for metrics only)."""
+        gt_masks: list of 2D {0,1} ground-truth silhouettes (for metrics only), or None for a dataset
+        without ground truth; the tp/tn/fp/fn/rms numbers are then None."""
         self.cfg = cfg = config or Config()
         self.images = [np.ascontiguousarray(im) for im in images]
-        self.gt = [np.asarray(g, dtype=float) for g in gt_masks]
+        self.gt = None if gt_masks is None else [np.asarray(g, dtype=float) for g in gt_masks]
         self.n_views = len(self.images)
         self.nhood = sil.disk(6)
         self.nhood_small = sil.disk(4)
@@ -197,11 +198,12 @@ class Solver:
             Ea = mask - mask_hat
             eu = np.sign(mask_hat - (Hn - Hp))
 
-            gt = self.gt[v]
-            err = gt - mask
-            fp += int((err < 0).sum()); fn += int((err > 0).sum())
-            tp += int(((mask * gt) == 1).sum()); tn += int((((1 - mask) * (1 - gt)) == 1).sum())
-            rms += np.sqrt((err ** 2).sum())
+            if self.gt is not None:
+                gt = self.gt[v]
+                err = gt - mask
+                fp += int((err < 0).sum()); fn += int((err > 0).sum())
+                tp += int(((mask * gt) == 1).sum()); tn += int((((1 - mask) * (1 - gt)) == 1).sum())
+                rms += np.sqrt((err ** 2).sum())
             l1 = 0.5 * (Ea ** 2).sum() / tot_px
             l2 = 0.5 * (eu ** 2).sum() / tot_px
             lya += l1 + l2; lya1 += l1; lya2 += l2
@@ -244,6 +246,9 @@ class Solver:
 
         out = {"iter": it, "energy": energy, "ienergy": ienergy, "rms": rms, "lyapunov": lya,
                "lyap1": lya1, "lyap2": lya2, "tp": tp, "tn": tn, "fp": fp, "fn": fn}
+        if self.gt is None:                                   # no ground truth: these numbers do not exist
+            for k in ("rms", "tp", "tn", "fp", "fn"):
+                out[k] = None
         for k in self.tracks:
             self.tracks[k].append(out[k])
         return out

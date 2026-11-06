@@ -13,34 +13,49 @@ from .data import gt_mask_from_gray
 from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
-def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None):
+def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
-    and, by default, as the solver's input.
+    and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
+    required and the metrics that compare against the ground truth are None.
+
+    `focal` (pixels) and `distance` (camera distance from the object in world units, default 160) are free
+    parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
 
     As in loader_wt_control_rec_error_trace.m, the observed image is the ground truth plus salt &
     pepper noise of density `noise`. If `photo_bytes` (n * rows * cols * 3 uint8 RGB) is given, the
     solver runs on the photos instead, on all three channels (the `length(size(img))==3` branch of
     the MATLAB loaders); noise is then applied to each channel independently.
     """
-    g = np.frombuffer(bytes(gray_bytes), dtype=np.uint8).reshape(n, rows, cols)
     rng = np.random.default_rng(int(seed))
-    masks = [gt_mask_from_gray(g[i]) for i in range(n)]
+    if gray_bytes is None:
+        if photo_bytes is None:
+            raise ValueError("a dataset without ground truth needs photos")
+        g = masks = None
+    else:
+        g = np.frombuffer(bytes(gray_bytes), dtype=np.uint8).reshape(n, rows, cols)
+        masks = [gt_mask_from_gray(g[i]) for i in range(n)]
     if photo_bytes is not None:
         src = np.frombuffer(bytes(photo_bytes), dtype=np.uint8).reshape(n, rows, cols, 3)
     else:
         src = g
     images = [imnoise_salt_pepper(src[i], float(noise), rng) if noise > 0 else src[i].copy() for i in range(n)]
-    solver = Solver(images, masks, Config(grid=int(grid)))
+    cfg = Config(grid=int(grid))
+    if focal is not None:
+        cfg.focal = float(focal)
+    if distance is not None:
+        cfg.camera_dist = float(distance) / (4.0 * cfg.loc_scale)     # camera_dist 4 <-> 160 world units
+    solver = Solver(images, masks, cfg)
     solver._bridge_masks = masks
     return solver
 
 
 def inputs_bytes(solver):
-    """(observed images, ground-truth masks, channels). Images are uint8, shape (n, rows, cols) or
+    """(observed images, ground-truth masks or b"" without ground truth, channels). Images are uint8, shape (n, rows, cols) or
     (n, rows, cols, 3); masks are 0/1, shape (n, rows, cols)."""
     imgs = np.stack(solver.images).astype(np.uint8)
-    gts = np.stack(solver._bridge_masks).astype(np.uint8)
-    return imgs.tobytes(), gts.tobytes(), (3 if imgs.ndim == 4 else 1)
+    masks = solver._bridge_masks
+    gts = b"" if masks is None else np.stack(masks).astype(np.uint8).tobytes()      # empty: no ground truth
+    return imgs.tobytes(), gts, (3 if imgs.ndim == 4 else 1)
 
 
 def set_strokes(solver, view, strokes_json):
