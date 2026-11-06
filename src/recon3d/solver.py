@@ -245,10 +245,10 @@ class Solver:
             if cfg.energy == "bhattacharyya":
                 # the Bhattacharyya force is already the outward speed (positive: grow); see sil.bhattacharyya_tables
                 if img.ndim == 3:
-                    t = sum(self.force_tables[k][(img[:, :, k].ravel(order="F")[img_idx].astype(np.int64) * cfg.hist_bins) // 256]
+                    t = sum(self.force_tables[k][(img[:, :, k].ravel(order="F")[img_idx].astype(np.intp) * cfg.hist_bins) // 256]
                             for k in range(3))
                 else:
-                    t = self.force_tables[0][(img.ravel(order="F")[img_idx].astype(np.int64) * cfg.hist_bins) // 256]
+                    t = self.force_tables[0][(img.ravel(order="F")[img_idx].astype(np.intp) * cfg.hist_bins) // 256]
                 t = -t                                     # undone by the flip below, which the Chan-Vese form needs
             elif img.ndim == 3:
                 t = sum(-1.0 * (in_m[k] - out_m[k]) *

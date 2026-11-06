@@ -257,7 +257,7 @@ def image_histograms(img, mask, bins):
     chans = [img[:, :, c] for c in range(3)] if img.ndim == 3 else [img]
     h_in = np.zeros((len(chans), bins)); h_out = np.zeros((len(chans), bins))
     for c, ch in enumerate(chans):
-        b = (ch.astype(np.int64) * bins) // 256
+        b = (ch.astype(np.intp) * bins) // 256            # intp: 32-bit in Pyodide, where bincount rejects int64
         h_in[c] = np.bincount(b[m], minlength=bins)[:bins]
         h_out[c] = np.bincount(b[~m], minlength=bins)[:bins]
     return h_in, h_out
