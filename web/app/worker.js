@@ -39,10 +39,10 @@ self.onmessage = async (e) => {
     } else if (m.cmd === 'init') {
       status('Building the volume…');
       const g = pyodide.globals;
-      g.set('_gt', m.gt || undefined); g.set('_focal', m.focal); g.set('_distance', m.distance); g.set('_box', m.box); g.set('_box_angle', m.boxAngle); g.set('_cam_h', m.cameraHeight); g.set('_energy', m.energy || 'bhattacharyya'); g.set('_n', m.n); g.set('_rows', m.rows); g.set('_cols', m.cols);
+      g.set('_gt', m.gt || undefined); g.set('_focal', m.focal); g.set('_distance', m.distance); g.set('_box', m.box); g.set('_box_angle', m.boxAngle); g.set('_cam_h', m.cameraHeight); g.set('_energy', m.energy || 'bhattacharyya'); g.set('_off', m.boxOffset); g.set('_n', m.n); g.set('_rows', m.rows); g.set('_cols', m.cols);
       g.set('_grid', m.grid); g.set('_noise', m.noise); g.set('_seed', m.seed);
       g.set('_photo', m.photos || undefined);   // RGB photos, or undefined to run on the silhouettes
-      pyodide.runPython('solver = bridge.init_solver(_gt.to_py() if _gt is not None else None, _n, _rows, _cols, _grid, _noise, _seed, _photo.to_py() if _photo is not None else None, _focal, _distance, _box.to_py(), _box_angle, _cam_h, _energy)');
+      pyodide.runPython('solver = bridge.init_solver(_gt.to_py() if _gt is not None else None, _n, _rows, _cols, _grid, _noise, _seed, _photo.to_py() if _photo is not None else None, _focal, _distance, _box.to_py(), _box_angle, _cam_h, _energy, _off.to_py())');
       const io = pyodide.runPython('bridge.inputs_bytes(solver)'); const [inp, gts, ch] = io.toJs(); io.destroy();
       const out = { type: 'init', gen: m.gen, channels: ch, inputs: inp.buffer, gts: gts.buffer };
       const tr = snapshot(out);
@@ -51,8 +51,8 @@ self.onmessage = async (e) => {
       // the starting surface only (no photos, no run): used to tune the camera and the initial box live
       const g = pyodide.globals;
       g.set('_n', m.n); g.set('_rows', m.rows); g.set('_cols', m.cols); g.set('_grid', m.grid); g.set('_focal', m.focal);
-      g.set('_distance', m.distance); g.set('_box', m.box); g.set('_box_angle', m.boxAngle); g.set('_cam_h', m.cameraHeight);
-      const r = pyodide.runPython('bridge.preview(_n, _rows, _cols, _grid, _focal, _distance, _box.to_py(), _box_angle, _cam_h)');
+      g.set('_distance', m.distance); g.set('_box', m.box); g.set('_box_angle', m.boxAngle); g.set('_cam_h', m.cameraHeight); g.set('_off', m.boxOffset);
+      const r = pyodide.runPython('bridge.preview(_n, _rows, _cols, _grid, _focal, _distance, _box.to_py(), _box_angle, _cam_h, _off.to_py())');
       const [o, mesh] = r.toJs(); r.destroy();
       postMessage({ type: 'preview', gen: m.gen, outlines: o.buffer, mesh: mesh.buffer }, [o.buffer, mesh.buffer]);
     } else if (m.cmd === 'strokes') {

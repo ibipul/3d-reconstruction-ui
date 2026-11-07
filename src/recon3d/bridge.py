@@ -14,7 +14,7 @@ from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
 def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0,
-                energy="bhattacharyya"):
+                energy="bhattacharyya", box_offset=(0.0, 0.0, 0.0)):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
     and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
     required and the metrics that compare against the ground truth are None.
@@ -23,6 +23,8 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
     `box` is the initial surface, an (x, y, z) size in voxels at grid 150 (scaled with the grid); default: the MATLAB box.
     `energy` is the region energy: "bhattacharyya" (histograms inside vs outside) or "chan_vese" (means, as in the MATLAB code).
+    `box_offset` (x, y, z in world units; z points down) moves the box, with the whole volume, away from the point the
+    cameras look at.
     `box_angle` turns that box about the vertical axis (degrees). `camera_height` raises the cameras above the ring
     plane (world units, positive = above the object).
 
@@ -53,6 +55,7 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
         cfg.init_box = tuple(float(b) for b in box)
         cfg.init_box_angle = float(box_angle)
     cfg.camera_height = float(camera_height)
+    cfg.init_box_offset = tuple(float(v) for v in box_offset)
     if distance is not None:
         cfg.camera_dist = float(distance) / (4.0 * cfg.loc_scale)     # camera_dist 4 <-> 160 world units
     solver = Solver(images, masks, cfg)
@@ -122,12 +125,13 @@ def _outline_parts(solver):
     return np.concatenate(parts).astype(np.float32).tobytes()
 
 
-def preview(n, rows, cols, grid, focal, distance, box, box_angle, camera_height):
+def preview(n, rows, cols, grid, focal, distance, box, box_angle, camera_height, box_offset=(0.0, 0.0, 0.0)):
     """The starting surface as outlines in every view plus its mesh, without photos or a run: a cheap look at the
     camera and initial-box settings while they are being tuned. Done at a coarse `grid`; the box has the same size
     in world units at any grid, so it matches the real run up to voxel rounding. Returns (outlines, mesh) bytes."""
     blank = np.zeros(n * rows * cols * 3, np.uint8).tobytes()
-    s = init_solver(None, n, rows, cols, grid, 0.0, 0, blank, focal, distance, box, box_angle, camera_height)
+    s = init_solver(None, n, rows, cols, grid, 0.0, 0, blank, focal, distance, box, box_angle, camera_height,
+                    box_offset=box_offset)
     return _outline_parts(s), _mesh_bytes(s.surface_mesh(False))
 
 

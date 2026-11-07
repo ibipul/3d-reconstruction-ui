@@ -41,6 +41,7 @@ class Config:
     rec_length_ref: int = 80      # at grid 150
     init_box_angle: float = 0.0   # degrees: the initial box turned about the vertical axis (only with init_box)
     camera_height: float = 0.0    # world units: the cameras raised above the ring plane (the MATLAB setups are level)
+    init_box_offset: tuple = (0.0, 0.0, 0.0)  # world units: where the box (and the volume) sits relative to the point the cameras look at
     init_box: tuple | None = None  # initial surface: (x, y, z) size in voxels at grid 150; None = the MATLAB box (20, 60, 80)
     narrow_band_high: float = 5.0
     sussman_every: int = 5
@@ -126,6 +127,8 @@ class Solver:
         I, J, K = np.unravel_index(in_pt, self.shape, order="F")
         m = np.array([I.mean(), J.mean(), K.mean()])
         m[2] += 1.0
+        # the box centre maps to the world origin, where all cameras look; an offset moves the whole volume instead
+        m = m - np.asarray(cfg.init_box_offset, float) / self.voxel_scale
         self.m = m
 
         self.tracks = {k: [] for k in

@@ -55,6 +55,11 @@ parameters, taken from `datasets.json` when you pick a dataset and editable befo
   grid; the MATLAB box is 20 × 60 × 80), and **angle**, which turns the box about the vertical axis (it matters because
   width and depth differ).
 
+- **Box shift** x / y / up: moves the box, with the whole volume, away from the point the cameras look at, in world units.
+  In an opened view, the **Move box** tool (key `M`) does it by dragging: the box follows the pointer in that view's image
+  plane (a drag to the right in view 36 moves it right in view 36). Strokes only act where the outline passes through
+  them, so put the box over the part you want to grow before you draw.
+
 Every change redraws the starting surface straight away: as a bold outline on all the views (and the open view) and as the
 box in the 3D panel, using a quick coarse-grid preview. The real run is re-initialised once you stop typing for about a
 second and a half. Tune until the outline sits just around the object in every view, then Run. Interaction replays

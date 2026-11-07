@@ -177,6 +177,9 @@ input[type=range] { accent-color: var(--accent); }
   <span class="group" role="group" aria-label="Initial surface" title="Size of the box the surface starts as, in voxels at grid 150 (scaled with the grid). The solver centres it on the origin. It should contain the object in every view and be a good deal smaller than the volume (150). Changing it re-initialises the run.">Initial box    <label title="Width of the box along its own x axis">width <input type="number" id="box-x" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>
     <label title="Size of the box along its own y axis">depth <input type="number" id="box-y" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>
     <label title="Height of the box">height <input type="number" id="box-z" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>
+    <label title="Move the box (and the volume with it) sideways along the world x axis, in world units. The Move box tool in an opened view does this by dragging.">shift x <input type="number" id="box-sx" class="initp" value="0" step="5" style="width:4.5em"></label>
+    <label title="Move the box along the world y axis, in world units.">y <input type="number" id="box-sy" class="initp" value="0" step="5" style="width:4.5em"></label>
+    <label title="Move the box up (negative: down), in world units.">up <input type="number" id="box-up" class="initp" value="0" step="5" style="width:4.5em"></label>
     <label title="Turn the box about the vertical axis, in degrees. It matters because width and depth differ.">angle <input type="number" id="box-a" class="initp" value="0" min="-180" max="180" step="5" style="width:4.5em">°</label></span>
   <span class="note" id="ds-note" style="flex-basis:100%"></span>
   <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt">silhouettes + noise (loader)</option><option value="photo" selected>RGB photos</option></select></label>
@@ -224,6 +227,7 @@ input[type=range] { accent-color: var(--accent); }
             <button class="tool" id="tool-in" aria-pressed="false"><span class="swatch dot" style="background:var(--mark-in)"></span>Inside <kbd>I</kbd></button>
             <button class="tool" id="tool-out" aria-pressed="false"><span class="swatch dot" style="background:var(--mark-out)"></span>Outside <kbd>O</kbd></button>
             <button class="tool" id="tool-erase" aria-pressed="false">Erase stroke <kbd>E</kbd></button>
+            <button class="tool" id="tool-move" aria-pressed="false" title="Drag in this view to move the starting box in this view's image plane">Move box <kbd>M</kbd></button>
           </div>
           <div>
             <h3 style="margin-bottom:6px">Brush <span class="mono" id="brush-v" style="text-transform:none;letter-spacing:0"></span></h3>
@@ -357,31 +361,55 @@ input[type=range] { accent-color: var(--accent); }
   function go(d) { if (cur >= 0) openFocus((cur + d + N) % N); }
   function setTool(t) {
     tool = (tool === t) ? null : t;
-    $('tool-in').setAttribute('aria-pressed', tool === 'in'); $('tool-out').setAttribute('aria-pressed', tool === 'out'); $('tool-erase').setAttribute('aria-pressed', tool === 'erase');
+    $('tool-in').setAttribute('aria-pressed', tool === 'in'); $('tool-out').setAttribute('aria-pressed', tool === 'out'); $('tool-erase').setAttribute('aria-pressed', tool === 'erase'); $('tool-move').setAttribute('aria-pressed', tool === 'move');
     fc.style.cursor = tool ? 'crosshair' : 'default'; fc.style.touchAction = tool ? 'none' : 'auto';
     updateFocusUI();
   }
   function updateFocusUI() {
-    $('hint').textContent = tool === 'in' ? 'Drawing inside marks. The object lies here.' : tool === 'out' ? 'Drawing outside marks. Background lies here.' : tool === 'erase' ? 'Drag across a stroke to remove it.' : 'Pick Inside or Outside, then draw on the image.';
+    $('hint').textContent = tool === 'in' ? 'Drawing inside marks. The object lies here.' : tool === 'out' ? 'Drawing outside marks. Background lies here.' : tool === 'erase' ? 'Drag across a stroke to remove it.' : tool === 'move' ? 'Drag to move the starting box in this view. Applies while no iterations have run; the run restarts.' : 'Pick Inside or Outside, then draw on the image.';
     if (cur >= 0) { var c = counts(cur); $('f-counts').textContent = c[0] + ' inside · ' + c[1] + ' outside strokes'; }
     $('brush-v').textContent = brush + ' px';
   }
   function curIter() { return hist && hist.length ? hist[hist.length - 1].iter : 0; }
   function sendStrokes(v) { if (worker && ready) worker.postMessage({ cmd: 'strokes', view: v, strokes: strokes[v] }); }
   function pt(e) { var r = fc.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+  /* ---------- the starting box: its offset, and dragging it in a view ---------- */
+  var moveStart = null;
+  function boxOffset() { return [+$('box-sx').value || 0, +$('box-sy').value || 0, -(+$('box-up').value || 0)]; }   // world x, y, z (z points down)
+  function setBoxOffset(o) {
+    $('box-sx').value = Math.round(o[0] * 10) / 10; $('box-sy').value = Math.round(o[1] * 10) / 10; $('box-up').value = Math.round(-o[2] * 10) / 10;
+    $('box-sx').dispatchEvent(new Event('input'));            // preview now, re-initialise when you stop
+  }
+  function viewAxes(i) {                                      // the camera of view i as the solver builds it: right, down and distance
+    var a = angle(i) * Math.PI / 180, D = +$('distance').value || 160, h = +$('cam-h').value || 0;
+    var loc = [D * Math.cos(a), D * Math.sin(a), -h], n = Math.hypot(loc[0], loc[1], loc[2]);
+    var cz = [-loc[0] / n, -loc[1] / n, -loc[2] / n];
+    var cx = [-cz[1], cz[0], 0], m = Math.hypot(cx[0], cx[1]); cx = [cx[0] / m, cx[1] / m, 0];     // (0,0,1) x cz
+    var cy = [cz[1] * cx[2] - cz[2] * cx[1], cz[2] * cx[0] - cz[0] * cx[2], cz[0] * cx[1] - cz[1] * cx[0]];   // cz x cx: image down
+    return { right: cx, down: cy, dist: n };
+  }
+  function dragBox(p) {
+    if (!moveStart) return;
+    var ax = viewAxes(moveStart.view), f = +$('focal').value || ds.focal, k = ax.dist / f;     // world units per image pixel at the box
+    var dx = (p[0] - moveStart.p[0]) * k, dy = (p[1] - moveStart.p[1]) * k, o = moveStart.off;
+    setBoxOffset([o[0] + dx * ax.right[0] + dy * ax.down[0], o[1] + dx * ax.right[1] + dy * ax.down[1], o[2] + dx * ax.right[2] + dy * ax.down[2]]);
+  }
   var drawing = null;
   fc.addEventListener('pointerdown', function (e) {
     if (!tool || cur < 0) return;
     fc.setPointerCapture(e.pointerId); var p = pt(e);
     if (tool === 'erase') { drawing = 'erase'; eraseAt(p); return; }
+    if (tool === 'move') { drawing = 'move'; moveStart = { p: p, off: boxOffset(), view: cur }; return; }
     drawing = { type: tool, size: brush, iter: curIter(), pts: [p] }; strokes[cur].push(drawing); renderFocus();
   });
   fc.addEventListener('pointermove', function (e) {
     if (!drawing) return; var p = pt(e);
     if (drawing === 'erase') { eraseAt(p); return; }
+    if (drawing === 'move') { dragBox(p); return; }
     drawing.pts.push(p); renderFocus();
   });
-  function endDraw() { if (drawing) { drawing = null; refreshCard(cur); updateFocusUI(); sendStrokes(cur); } }
+  function endDraw() { if (drawing === 'move') { drawing = null; moveStart = null; return; }
+    if (drawing) { drawing = null; refreshCard(cur); updateFocusUI(); sendStrokes(cur); } }
   fc.addEventListener('pointerup', endDraw); fc.addEventListener('pointercancel', endDraw);
   function eraseAt(p) {
     var keep = strokes[cur].filter(function (s) {
@@ -393,14 +421,14 @@ input[type=range] { accent-color: var(--accent); }
   function changed() { renderFocus(); refreshCard(cur); updateFocusUI(); sendStrokes(cur); }
   $('undo').onclick = function () { if (cur >= 0) { strokes[cur].pop(); changed(); } };
   $('clear').onclick = function () { if (cur >= 0) { strokes[cur] = []; changed(); } };
-  $('tool-in').onclick = function () { setTool('in'); }; $('tool-out').onclick = function () { setTool('out'); }; $('tool-erase').onclick = function () { setTool('erase'); };
+  $('tool-in').onclick = function () { setTool('in'); }; $('tool-out').onclick = function () { setTool('out'); }; $('tool-erase').onclick = function () { setTool('erase'); }; $('tool-move').onclick = function () { setTool('move'); };
   $('brush').oninput = function (e) { brush = +e.target.value; updateFocusUI(); };
   $('prev').onclick = function () { go(-1); }; $('next').onclick = function () { go(1); }; $('close').onclick = closeFocus;
   document.addEventListener('keydown', function (e) {
     if (cur < 0 || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     var k = e.key;
     if (k === 'Escape') closeFocus(); else if (k === 'ArrowLeft') go(-1); else if (k === 'ArrowRight') go(1);
-    else if (k === 'i' || k === 'I') setTool('in'); else if (k === 'o' || k === 'O') setTool('out'); else if (k === 'e' || k === 'E') setTool('erase');
+    else if (k === 'i' || k === 'I') setTool('in'); else if (k === 'o' || k === 'O') setTool('out'); else if (k === 'e' || k === 'E') setTool('erase'); else if (k === 'm' || k === 'M') setTool('move');
   });
   window.addEventListener('resize', function () { if (cur >= 0) { fitFocus(); renderFocus(); } });
 
@@ -642,7 +670,7 @@ input[type=range] { accent-color: var(--accent); }
     setStatus('Building the volume…');
     var all = null;
     if (hasGT) { all = new Uint8Array(N * W * H); for (var i = 0; i < N; i++) all.set(gtGray[i], i * W * H); }
-    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, energy: $('energy').value, focal: +$('focal').value || ds.focal, distance: +$('distance').value || 160, box: [+$('box-x').value, +$('box-y').value, +$('box-z').value], boxAngle: +$('box-a').value || 0, cameraHeight: +$('cam-h').value || 0 };
+    var msg = { cmd: 'init', gen: gen, gt: all, n: N, rows: H, cols: W, grid: +$('grid-n').value, noise: +$('noise').value, seed: +$('seed').value, boxOffset: boxOffset(), energy: $('energy').value, focal: +$('focal').value || ds.focal, distance: +$('distance').value || 160, box: [+$('box-x').value, +$('box-y').value, +$('box-z').value], boxAngle: +$('box-a').value || 0, cameraHeight: +$('cam-h').value || 0 };
     if ($('source').value === 'photo' || !hasGT) msg.photos = photoBytes();
     worker.postMessage(msg);
   }
@@ -654,7 +682,7 @@ input[type=range] { accent-color: var(--accent); }
     if (!(booted && imagesReady && worker)) return;
     if (previewBusy) { previewPending = true; return; }
     previewBusy = true;
-    worker.postMessage({ cmd: 'preview', gen: gen, n: N, rows: H, cols: W, grid: 40, focal: +$('focal').value || ds.focal, distance: +$('distance').value || 160,
+    worker.postMessage({ cmd: 'preview', gen: gen, boxOffset: boxOffset(), n: N, rows: H, cols: W, grid: 40, focal: +$('focal').value || ds.focal, distance: +$('distance').value || 160,
       box: [+$('box-x').value, +$('box-y').value, +$('box-z').value], boxAngle: +$('box-a').value || 0, cameraHeight: +$('cam-h').value || 0 });
   }
   Array.prototype.forEach.call(document.querySelectorAll('.initp'), function (el) {
@@ -870,7 +898,7 @@ input[type=range] { accent-color: var(--accent); }
     strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
     cur = -1; sel = -1; $('focus').hidden = true;
     fc.width = W * 2; fc.height = H * 2;
-    $('dataset').value = id; $('distance').value = d.distance || 160; $('focal').value = d.focal; var bx = d.box || [20, 60, 80]; $('box-x').value = bx[0]; $('box-y').value = bx[1]; $('box-z').value = bx[2]; $('box-a').value = d.boxAngle || 0; $('cam-h').value = d.cameraHeight || 0; $('ds-note').textContent = d.note || '';
+    $('dataset').value = id; $('distance').value = d.distance || 160; $('focal').value = d.focal; var bx = d.box || [20, 60, 80]; $('box-x').value = bx[0]; $('box-y').value = bx[1]; $('box-z').value = bx[2]; $('box-a').value = d.boxAngle || 0; var bo = d.boxOffset || [0, 0, 0]; $('box-sx').value = bo[0]; $('box-sy').value = bo[1]; $('box-up').value = -bo[2]; $('cam-h').value = d.cameraHeight || 0; $('ds-note').textContent = d.note || '';
     try { var u = new URL(location.href); u.searchParams.set('dataset', id); history.replaceState(null, '', u); } catch (e) { /* not essential */ }
     setGTControls(); buildGrid(); samples = []; populateSamples(); loadManifest(); showMetrics(); drawPlot(); requestRender(); showInfo('');
     setStatus('Loading images…');

@@ -183,3 +183,40 @@ def test_preview_shows_the_starting_surface_without_a_run():
     o = np.frombuffer(outlines, np.float32)
     assert o.size > 2 * n and np.isfinite(o).all() and o[0] > 0          # a first view with a phi outline
     assert np.frombuffer(mesh[:8], np.int32)[1] > 0                      # and some triangles
+
+
+def _world_centre(s):
+    inside = np.argwhere(s.phi >= 0).astype(float)
+    return ((inside - s.m).mean(0)) * s.voxel_scale
+
+
+def test_box_offset_moves_the_box_in_world_coordinates():
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(8).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8).tobytes()
+    for grid in (48, 64):
+        a = bridge.init_solver(None, n, rows, cols, grid, 0.0, 0, photos, box=(20, 60, 80))
+        b = bridge.init_solver(None, n, rows, cols, grid, 0.0, 0, photos, box=(20, 60, 80), box_offset=(15.0, -20.0, 30.0))
+        d = _world_centre(b) - _world_centre(a)
+        assert np.allclose(d, (15.0, -20.0, 30.0), atol=2.5), (grid, d)
+        assert json.loads(bridge.step(b, 2))["collapsed"] is None
+
+
+def test_dragging_right_in_a_view_moves_the_box_right_in_that_view():
+    """The page turns a drag in view i into a world shift along the camera's right/down axes; check against the
+    solver's own projection that those axes really are image-right and image-down."""
+    n, rows, cols = 36, 54, 80
+    photos = np.random.default_rng(9).integers(40, 220, (n, rows, cols, 3), dtype=np.uint8).tobytes()
+    for height in (0.0, 40.0):
+        s = bridge.init_solver(None, n, rows, cols, 40, 0.0, 0, photos, focal=130.0, camera_height=height)
+        for i in (0, 9, 35):                                    # the page's axes, written the same way
+            a = np.deg2rad(3 + 10 * i)
+            loc = np.array([160 * np.cos(a), 160 * np.sin(a), -height]); cz = -loc / np.linalg.norm(loc)
+            cx = np.cross([0, 0, 1], cz); cx /= np.linalg.norm(cx)
+            cy = np.cross(cz, cx)
+            P = s.views[i]["P"]
+            def proj(w):
+                t = P @ np.append(w, 1.0); return t[:2] / t[2]
+            base = proj(np.zeros(3))
+            right, down = proj(10 * cx) - base, proj(10 * cy) - base
+            assert right[0] > 5 and abs(right[1]) < 1.0, (i, height, right)      # right: +x in the image, no y
+            assert down[1] > 5 and abs(down[0]) < 1.0, (i, height, down)
