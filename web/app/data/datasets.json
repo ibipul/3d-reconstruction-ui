@@ -31,13 +31,13 @@
    "height": 216,
    "angleStart": 3,
    "angleStep": 10,
-   "focal": 520,
-   "distance": 160,
+   "focal": 470,
+   "distance": 300,
    "cameraHeight": 0,
-   "box": [20, 60, 80],
+   "box": [60, 110, 100],
    "boxAngle": 0,
    "boxOffset": [0, 0, 0],
-   "note": "Real turntable photos (684x461 originals shrunk to 320x216), run through the same camera ring as sentinel_polar: level cameras, 10 degree steps, focal 520 px. There are no silhouettes, so IoU, false positives/negatives and RMS error are not available. Distance, focal, camera height and the initial box are guesses: change them and watch the bold initial outline on the views until it sits just around the zebra in every view."
+   "note": "Real turntable photos (684x461 originals shrunk to 320x216). There are no silhouettes, so IoU, false positives/negatives and RMS error are not available. The starting values come from the older reconstruction-matlab loaders for real photos (camera distance 300, focal 1000 at full size = 470 here, level cameras, a box 100 tall with x inset 20 and y outset 5 around a 100 square), not from a calibration: tune them until the bold outline sits just around the zebra in every view."
   }
  ]
 }
