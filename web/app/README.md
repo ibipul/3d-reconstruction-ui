@@ -60,6 +60,11 @@ parameters, taken from `datasets.json` when you pick a dataset and editable befo
   plane (a drag to the right in view 36 moves it right in view 36). Strokes only act where the outline passes through
   them, so put the box over the part you want to grow before you draw.
 
+Each dataset has its own values for all of these in `data/datasets.json` (`distance`, `focal`, `cameraHeight`, `box`,
+`boxAngle`, `boxOffset`), applied when you pick it. To set them for a dataset, tune in the page, press **Copy settings**
+(it copies the JSON entry for the dataset), and paste the values into `datasets.json`. **Reset to defaults** goes back to
+the listed values.
+
 Every change redraws the starting surface straight away: as a bold outline on all the views (and the open view) and as the
 box in the 3D panel, using a quick coarse-grid preview. The real run is re-initialised once you stop typing for about a
 second and a half. Tune until the outline sits just around the object in every view, then Run. Interaction replays

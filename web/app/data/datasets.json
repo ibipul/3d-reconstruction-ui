@@ -13,13 +13,12 @@
    "angleStart": 3,
    "angleStep": 10,
    "focal": 520,
-   "note": "The MATLAB repo's dataset25 photos with the dataset_sentinel_gt silhouettes as ground truth. Level cameras on a ring at 10 degree steps.",
    "distance": 160,
-   "box": [
-    20,
-    60,
-    80
-   ]
+   "cameraHeight": 0,
+   "box": [20, 60, 80],
+   "boxAngle": 0,
+   "boxOffset": [0, 0, 0],
+   "note": "The MATLAB repo's dataset25 photos with the dataset_sentinel_gt silhouettes as ground truth. Level cameras on a ring at 10 degree steps."
   },
   {
    "id": "zebra",
@@ -33,13 +32,12 @@
    "angleStart": 3,
    "angleStep": 10,
    "focal": 520,
-   "note": "Real turntable photos (684x461 originals shrunk to 320x216), run through the same camera ring as sentinel_polar: level cameras, 10 degree steps, focal 520 px. There are no silhouettes, so IoU, false positives/negatives and RMS error are not available. Distance, focal, camera height and the initial box are guesses: change them and watch the bold initial outline on the views until it sits just around the zebra in every view.",
    "distance": 160,
-   "box": [
-    20,
-    60,
-    80
-   ]
+   "cameraHeight": 0,
+   "box": [20, 60, 80],
+   "boxAngle": 0,
+   "boxOffset": [0, 0, 0],
+   "note": "Real turntable photos (684x461 originals shrunk to 320x216), run through the same camera ring as sentinel_polar: level cameras, 10 degree steps, focal 520 px. There are no silhouettes, so IoU, false positives/negatives and RMS error are not available. Distance, focal, camera height and the initial box are guesses: change them and watch the bold initial outline on the views until it sits just around the zebra in every view."
   }
  ]
 }

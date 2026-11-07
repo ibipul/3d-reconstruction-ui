@@ -181,6 +181,11 @@ input[type=range] { accent-color: var(--accent); }
     <label title="Move the box along the world y axis, in world units.">y <input type="number" id="box-sy" class="initp" value="0" step="5" style="width:4.5em"></label>
     <label title="Move the box up (negative: down), in world units.">up <input type="number" id="box-up" class="initp" value="0" step="5" style="width:4.5em"></label>
     <label title="Turn the box about the vertical axis, in degrees. It matters because width and depth differ.">angle <input type="number" id="box-a" class="initp" value="0" min="-180" max="180" step="5" style="width:4.5em">°</label></span>
+  <span class="group" role="group" aria-label="Dataset settings">
+    <button class="btn mini" id="ds-copy" type="button" title="Copy the camera and starting-box settings as the JSON entry for this dataset in data/datasets.json">Copy settings</button>
+    <button class="btn mini" id="ds-reset" type="button" title="Go back to the values listed for this dataset in data/datasets.json">Reset to defaults</button>
+    <span class="mono" id="ds-info"></span>
+  </span>
   <span class="note" id="ds-note" style="flex-basis:100%"></span>
   <label title="What the solver sees. The MATLAB trace loader runs on the ground-truth silhouettes plus noise; the colour photos use the three-channel branch of the loaders (force and energy summed over R, G, B).">Input <select id="source"><option value="gt">silhouettes + noise (loader)</option><option value="photo" selected>RGB photos</option></select></label>
   <label title="The region energy the surface descends. Bhattacharyya compares the whole colour histogram inside and outside the surface. Chan-Vese compares only the mean colours, as in the MATLAB code. Changing it needs Re-initialise.">Energy <select id="energy"><option value="bhattacharyya" selected>Bhattacharyya (histograms)</option><option value="chan_vese">Chan-Vese (means, MATLAB)</option></select></label>
@@ -887,6 +892,29 @@ input[type=range] { accent-color: var(--accent); }
     }
     $('s-iou').title = $('s-fpfn').title = hasGT ? '' : why;
   }
+  /* ---------- per-dataset camera and starting-box settings ---------- */
+  function applyDefaults(d) {                                 // the values listed for the dataset in data/datasets.json
+    $('distance').value = d.distance || 160; $('focal').value = d.focal; $('cam-h').value = d.cameraHeight || 0;
+    var bx = d.box || [20, 60, 80]; $('box-x').value = bx[0]; $('box-y').value = bx[1]; $('box-z').value = bx[2]; $('box-a').value = d.boxAngle || 0;
+    var bo = d.boxOffset || [0, 0, 0]; $('box-sx').value = bo[0]; $('box-sy').value = bo[1]; $('box-up').value = -bo[2];
+  }
+  function currentSettings() {                                // what to paste into this dataset's entry in data/datasets.json
+    var o = boxOffset();
+    return { distance: +$('distance').value, focal: +$('focal').value, cameraHeight: +$('cam-h').value,
+             box: [+$('box-x').value, +$('box-y').value, +$('box-z').value], boxAngle: +$('box-a').value, boxOffset: [o[0], o[1], o[2]] };
+  }
+  $('ds-copy').onclick = function () {
+    var txt = '"' + ds.id + '": ' + JSON.stringify(currentSettings());
+    var done = function () { $('ds-info').textContent = 'copied: ' + txt; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, function () { $('ds-info').textContent = txt; });
+    else $('ds-info').textContent = txt;
+    console.log(txt);
+  };
+  $('ds-reset').onclick = function () {
+    applyDefaults(ds); $('ds-info').textContent = 'back to the listed defaults';
+    $('distance').dispatchEvent(new Event('input'));          // preview now, re-initialise when you stop
+  };
+
   var loadToken = 0;
   function loadDataset(id) {
     var d = datasetById[id]; if (!d) return Promise.reject(new Error('Unknown dataset ' + id));
@@ -898,7 +926,7 @@ input[type=range] { accent-color: var(--accent); }
     strokes = []; for (var k = 0; k < N; k++) strokes.push([]);
     cur = -1; sel = -1; $('focus').hidden = true;
     fc.width = W * 2; fc.height = H * 2;
-    $('dataset').value = id; $('distance').value = d.distance || 160; $('focal').value = d.focal; var bx = d.box || [20, 60, 80]; $('box-x').value = bx[0]; $('box-y').value = bx[1]; $('box-z').value = bx[2]; $('box-a').value = d.boxAngle || 0; var bo = d.boxOffset || [0, 0, 0]; $('box-sx').value = bo[0]; $('box-sy').value = bo[1]; $('box-up').value = -bo[2]; $('cam-h').value = d.cameraHeight || 0; $('ds-note').textContent = d.note || '';
+    $('dataset').value = id; applyDefaults(d); $('ds-note').textContent = d.note || '';
     try { var u = new URL(location.href); u.searchParams.set('dataset', id); history.replaceState(null, '', u); } catch (e) { /* not essential */ }
     setGTControls(); buildGrid(); samples = []; populateSamples(); loadManifest(); showMetrics(); drawPlot(); requestRender(); showInfo('');
     setStatus('Loading images…');
