@@ -71,6 +71,10 @@ parameters, taken from `datasets.json` when you pick a dataset and editable befo
 - **Distance**: camera distance in world units (160 for sentinel_polar).
 - **Focal**: focal length in pixels of the (shrunk) images (520 at 320 px high for sentinel_polar).
 - **Camera height**: the cameras raised above the ring plane, in world units (0 = level; positive = looking down on the object).
+- **Keep box centred** (next to Camera height): raising the cameras also moves the box down in every view, by about
+  focal × height ÷ distance pixels. With this on, a change of Camera height moves the box's *up* shift by the same
+  amount, so the box stays put and only the viewing angle changes. It acts only when you change the height, so your own
+  up shift is kept, and the match is approximate (1–3 px at heights up to 60). On by default for zebra.
 - **Initial box** width / depth / height: the size of the box the surface starts as, in voxels at grid 150 (scaled with the
   grid; the MATLAB box is 20 × 60 × 80), and **angle**, which turns the box about the vertical axis (it matters because
   width and depth differ).

@@ -176,6 +176,7 @@ input[type=range] { accent-color: var(--accent); }
   <label title="Camera distance from the object, in world units (sentinel_polar: 160). It sets how big the object looks compared with the initial surface, so adjust it per dataset by trial and error. Changing it re-initialises the run.">Distance <input type="number" id="distance" class="initp" value="160" min="40" max="1000" step="5" style="width:5em"></label>
   <label title="Focal length of the cameras in pixels of the (shrunk) images. Larger zooms in: the object looks bigger. sentinel_polar uses 520 at 320 px high. Changing it re-initialises the run.">Focal <input type="number" id="focal" class="initp" value="520" min="50" max="5000" step="10" style="width:5.5em"></label>
   <label title="Height of the cameras above the ring plane, in world units (0 = level, as in the MATLAB setups; positive = looking down on the object). Changing it re-initialises the run.">Camera height <input type="number" id="cam-h" class="initp" value="0" min="-400" max="400" step="5" style="width:5em"></label>
+  <label title="Raising the cameras also moves the box down in every view (by about focal x height / distance pixels). With this on, a change of Camera height moves the box up by the same amount, so the box stays where it was and only the viewing angle changes. It acts only when you change the height; your own up shift is kept. The match is approximate (1-3 px at heights up to 60)."><input type="checkbox" id="keep-centred"> keep box centred</label>
   <span class="group" role="group" aria-label="Initial surface" title="Size of the box the surface starts as, in voxels at grid 150 (scaled with the grid). The solver centres it on the origin. It should contain the object in every view and be a good deal smaller than the volume (150). Changing it re-initialises the run.">Initial box    <label title="Width of the box along its own x axis">width <input type="number" id="box-x" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>
     <label title="Size of the box along its own y axis">depth <input type="number" id="box-y" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>
     <label title="Height of the box">height <input type="number" id="box-z" class="initp" min="4" max="146" step="2" style="width:4.5em"></label>
@@ -709,6 +710,7 @@ input[type=range] { accent-color: var(--accent); }
   }
   Array.prototype.forEach.call(document.querySelectorAll('.initp'), function (el) {
     el.addEventListener('input', function () {
+      if (el.id === 'cam-h') keepBoxCentred();
       if (!(booted && imagesReady)) return;
       stop(); gen++; hist = []; showMetrics(); drawPlot(); sendPreview();   // gen++: a step still in flight is ignored
       clearTimeout(reinitTimer); reinitTimer = setTimeout(function () { if (booted && imagesReady) maybeInit(); }, 1500);
@@ -914,15 +916,20 @@ input[type=range] { accent-color: var(--accent); }
     $('s-iou').title = $('s-fpfn').title = hasGT ? '' : why;
   }
   /* ---------- per-dataset camera and starting-box settings ---------- */
+  var lastHeight = 0;
+  function keepBoxCentred() {                                 // the box follows a change of Camera height, so it stays put in the views
+    var h = +$('cam-h').value || 0, dh = h - lastHeight; lastHeight = h;
+    if ($('keep-centred').checked && dh) $('box-up').value = Math.round(((+$('box-up').value || 0) + dh) * 10) / 10;
+  }
   function applyDefaults(d) {                                 // the values listed for the dataset in data/datasets.json
-    $('distance').value = d.distance || 160; $('focal').value = d.focal; $('cam-h').value = d.cameraHeight || 0;
+    $('distance').value = d.distance || 160; $('focal').value = d.focal; $('cam-h').value = d.cameraHeight || 0; lastHeight = +$('cam-h').value; $('keep-centred').checked = !!d.keepCentred;
     var bx = d.box || [20, 60, 80]; $('box-x').value = bx[0]; $('box-y').value = bx[1]; $('box-z').value = bx[2]; $('box-a').value = d.boxAngle || 0;
     var bo = d.boxOffset || [0, 0, 0]; $('box-sx').value = bo[0]; $('box-sy').value = bo[1]; $('box-up').value = -bo[2];
   }
   function currentSettings() {                                // what to paste into this dataset's entry in data/datasets.json
     var o = boxOffset();
     return { distance: +$('distance').value, focal: +$('focal').value, cameraHeight: +$('cam-h').value,
-             box: [+$('box-x').value, +$('box-y').value, +$('box-z').value], boxAngle: +$('box-a').value, boxOffset: [o[0], o[1], o[2]] };
+             box: [+$('box-x').value, +$('box-y').value, +$('box-z').value], boxAngle: +$('box-a').value, boxOffset: [o[0], o[1], o[2]], keepCentred: $('keep-centred').checked };
   }
   $('ds-copy').onclick = function () {
     var txt = '"' + ds.id + '": ' + JSON.stringify(currentSettings());
