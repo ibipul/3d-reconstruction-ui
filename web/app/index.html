@@ -826,7 +826,7 @@ input[type=range] { accent-color: var(--accent); }
   var plugQueue = [], samples = [];
   function loadManifest() {
     var token = loadToken;
-    fetch('data/' + ds.dir + '/strokes/manifest.json').then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
+    fetch('data/' + ds.dir + '/strokes/manifest.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (m) {
       return m.samples || [];
     }).catch(function () { return []; }).then(function (list) { if (token === loadToken) { samples = list; populateSamples(); } });
   }
@@ -965,7 +965,7 @@ input[type=range] { accent-color: var(--accent); }
     worker.onerror = function (e) { setStatus('Worker error: ' + e.message, true); };
     worker.postMessage({ cmd: 'boot', srcBase: srcBase });
   }).catch(function (err) { setStatus(err.message, true); });
-  fetch('data/datasets.json').then(function (r) { if (!r.ok) throw new Error('data/datasets.json: HTTP ' + r.status); return r.json(); }).then(function (m) {
+  fetch('data/datasets.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('data/datasets.json: HTTP ' + r.status); return r.json(); }).then(function (m) {
     datasets = m.datasets; datasets.forEach(function (d) { datasetById[d.id] = d; var o = document.createElement('option'); o.value = d.id; o.textContent = d.title; $('dataset').appendChild(o); });
     var want = new URLSearchParams(location.search).get('dataset');
     return loadDataset(datasetById[want] ? want : m['default']);
