@@ -63,6 +63,7 @@ The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the pho
 | Dataset | Photos | Ground truth |
 |---|---|---|
 | `sentinel_polar` | 36 synthetic views, 200×320 | yes: IoU, FP/FN and RMS error are shown |
+| `reaper_polar` | 36 synthetic renders, 232×320 (shrunk from 290×400) | no: same as zebra below; starts from the same settings as sentinel_polar |
 | `zebra` | 36 real photos, 320×216 | no: the *Silhouettes + noise* input, the *Ground truth* view and the IoU / FP+FN / RMS traces are disabled; energy and Lyapunov remain |
 
 Every dataset starts from the same camera ring as the MATLAB code (level cameras, 10° steps). These settings are free

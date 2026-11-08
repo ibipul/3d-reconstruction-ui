@@ -22,6 +22,26 @@
    "note": "The MATLAB repo's dataset25 photos with the dataset_sentinel_gt silhouettes as ground truth. Level cameras on a ring at 10 degree steps."
   },
   {
+   "id": "reaper_polar",
+   "title": "reaper_polar (synthetic drone, no ground truth)",
+   "dir": "reaper_polar",
+   "photoExt": "png",
+   "gt": false,
+   "views": 36,
+   "width": 232,
+   "height": 320,
+   "angleStart": 3,
+   "angleStep": 10,
+   "focal": 520,
+   "distance": 160,
+   "cameraHeight": 0,
+   "keepCentred": false,
+   "box": [20, 60, 80],
+   "boxAngle": 0,
+   "boxOffset": [0, 0, 0],
+   "note": "Same polar camera ring and starting settings as sentinel_polar (distance 160, focal 520, level cameras, box 20 x 60 x 80). The 290x400 renders are shrunk to 232x320, the height of the sentinel images, so the same focal length gives the same field of view. There are no ground-truth silhouettes, so IoU, false positives/negatives and RMS error are not available."
+  },
+  {
    "id": "zebra",
    "title": "zebra (real photos, no ground truth)",
    "dir": "zebra",
