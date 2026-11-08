@@ -75,10 +75,11 @@ parameters, taken from `datasets.json` when you pick a dataset and editable befo
   grid; the MATLAB box is 20 × 60 × 80), and **angle**, which turns the box about the vertical axis (it matters because
   width and depth differ).
 
-- **Box shift** x / y / up: moves the box, with the whole volume, away from the point the cameras look at, in world units.
-  In an opened view, the **Move box** tool (key `M`) does it by dragging: the box follows the pointer in that view's image
-  plane (a drag to the right in view 36 moves it right in view 36). Strokes only act where the outline passes through
-  them, so put the box over the part you want to grow before you draw.
+- **Box shift** x / y / up: moves the box, with the whole volume, away from the point the cameras look at, in world units
+  (steps of 1). In an opened view, the **Move starting box** arrows move it in small steps in that view's image plane
+  (0.5, 1, 2, 5 or 10 pixels of that view per click; `Shift`+arrow keys do the same, plain arrows still switch views).
+  With level cameras, up and down are the world's vertical axis in every view. Strokes only act where the outline passes
+  through them, so put the box over the part you want to grow before you draw.
 
 Each dataset has its own values for all of these in `data/datasets.json` (`distance`, `focal`, `cameraHeight`, `box`,
 `boxAngle`, `boxOffset`), applied when you pick it. To set them for a dataset, tune in the page, press **Copy settings**
