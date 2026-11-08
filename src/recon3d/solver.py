@@ -48,6 +48,10 @@ class Config:
     sussman_dt: float = 0.5
     curvature_weight: float = 0.001
     eps_visibility: float = 120.0
+    update: str = "cfl"           # how the views' forces move the surface: "cfl" (summed over the views, then limited as a whole)
+                                  # or "per_view" (the MATLAB code: each view normalised to a half-voxel step on its own)
+    cfl: float = 0.5              # the most any voxel of phi may move in one iteration (voxels): the CFL bound
+    force_percentile: float = 25.0  # "cfl": the total force at this percentile of the moving voxels is scaled to the full cfl step
     energy: str = "bhattacharyya"  # region energy: "bhattacharyya" (histograms) or "chan_vese" (means, as in the MATLAB code)
     hist_bins: int = 32           # Bhattacharyya: intensity bins per channel
     hist_sigma: float = 1.0       # Bhattacharyya: smoothing of the histograms, in bins
@@ -204,6 +208,10 @@ class Solver:
 
         pf = self.phi.ravel(order="F")
         pf_hat = self.phi_hat.ravel(order="F")
+        cfl = cfg.update == "cfl"
+        if cfl:                                              # forces of all views are collected here, then applied once
+            acc = np.zeros(pf.size); acc_hat = np.zeros(pf_hat.size)
+            hit = np.zeros(pf.size, bool); hit_hat = np.zeros(pf_hat.size, bool)
         band = np.flatnonzero((pf >= 0) & (pf <= cfg.narrow_band_high))
         band_hat = np.flatnonzero((pf_hat >= 0) & (pf_hat <= cfg.narrow_band_high))
 
@@ -268,17 +276,25 @@ class Solver:
             ng = grad / np.max(np.abs(grad + 1e-5))
             nc = -cfg.curvature_weight * curvature / np.max(np.abs(curvature + 1e-5))
             dphi = ng + nc
-            ndphi = 0.5 * dphi / np.max(np.abs(dphi + 1e-5))
-            pf[band[ibi]] += ndphi[ioi]
+            if cfl:
+                acc[band[ibi]] += dphi[ioi]; hit[band[ibi]] = True
+            else:
+                ndphi = 0.5 * dphi / np.max(np.abs(dphi + 1e-5))
+                pf[band[ibi]] += ndphi[ioi]
 
             # phi_hat: driven by the error and the user strokes
             ea_h = Ea.ravel(order="F")[img_idx_h]
             fu_h = u.ravel(order="F")[img_idx_h]
             if ea_h.size:
                 d_hat = ea_h / np.max(np.abs(ea_h + 1e-5)) + fu_h / np.max(np.abs(fu_h + 1e-5))
-                n_hat = 0.5 * d_hat / np.max(np.abs(d_hat + 1e-5))
-                pf_hat[band_hat[ibi_h]] += n_hat[ioi_h]
+                if cfl:
+                    acc_hat[band_hat[ibi_h]] += d_hat[ioi_h]; hit_hat[band_hat[ibi_h]] = True
+                else:
+                    n_hat = 0.5 * d_hat / np.max(np.abs(d_hat + 1e-5))
+                    pf_hat[band_hat[ibi_h]] += n_hat[ioi_h]
 
+        if cfl:
+            self._apply_cfl(pf, acc, hit); self._apply_cfl(pf_hat, acc_hat, hit_hat)
         if cfg.energy == "bhattacharyya":
             energy, ienergy = float(self.energy_value), float(self.ienergy_value)       # ln B, <= 0
         else:
@@ -298,6 +314,25 @@ class Solver:
         for k in self.tracks:
             self.tracks[k].append(out[k])
         return out
+
+    def _apply_cfl(self, pf, acc, hit):
+        """Move phi by the total force `acc` of all views, never by more than `cfg.cfl` voxels in one iteration.
+
+        The MATLAB code scaled each view's force to a half-voxel step on its own, so a voxel seen by many views could move
+        several voxels at once (against the CFL bound), while most voxels moved a few hundredths because one outlier
+        set each view's scale. Here the views are summed first; the force at the `force_percentile` of the moving voxels
+        is scaled to the full `cfl` step and anything stronger is clipped to it, so the bound holds exactly and a typical
+        voxel uses most of it."""
+        idx = np.flatnonzero(hit)              # voxels that received a force (not merely a nonzero sum: cancellations are noise)
+        if idx.size == 0:
+            return
+        a = acc[idx]
+        scale = np.percentile(np.abs(a), self.cfg.force_percentile)
+        if not scale > 0:
+            scale = np.abs(a).max()
+        if not scale > 0:                       # every force cancelled exactly: nothing moves
+            return
+        pf[idx] += np.clip(self.cfg.cfl * a / scale, -self.cfg.cfl, self.cfg.cfl)
 
     # ------------------------------------------------------------------ views for the UI
     def outline(self, v: int, hat: bool = False):

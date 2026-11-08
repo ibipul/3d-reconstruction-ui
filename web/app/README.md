@@ -18,6 +18,26 @@ Open http://localhost:8000/web/app/. It must be served over HTTP: as a `file://`
 blocks the worker and image decoding. The first load downloads Pyodide, NumPy and SciPy from the
 jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 
+## Update rule (CFL)
+
+How the forces of the 36 views move the surface is the **Update** setting (change it, then *Re-initialise*).
+
+φ is kept close to a distance function, so one iteration may move it by at most half a voxel (the CFL bound) or the
+explicit update becomes unstable.
+
+- **CFL-limited (summed)**, the default: each view's force is added up per voxel, and the total is limited as a whole. The
+  total force at the *Force percentile* of the moving voxels is scaled to the full half-voxel step, and anything stronger is
+  clipped to it. So the bound holds exactly, and a typical silhouette voxel uses most of the step. A lower percentile moves
+  more voxels at the full step; 100 scales by the strongest voxel. It can be changed while the run goes.
+- **MATLAB (per view)**: each view is scaled to a half-voxel step on its own and the results are added. A voxel seen by
+  many views can then move several voxels in one iteration (measured: up to 3.9 on sentinel_polar, 2,000+ voxels above
+  0.5 in the first iteration), and because the scale is set by one outlier pixel per view, most voxels move only
+  hundredths of a voxel (median 0.01 for Bhattacharyya).
+
+On sentinel_polar (RGB photos, grid 100, 200 iterations) the best IoU against the ground truth was 0.40 for Bhattacharyya
+under the MATLAB rule and 0.69 under the CFL rule (percentile 25), and for Chan-Vese 0.83 and 0.85. The shipped replay was recorded
+under the MATLAB rule, so Play switches to it.
+
 ## Energy
 
 The **Energy** setting chooses the region energy the surface descends (change it, then *Re-initialise*):

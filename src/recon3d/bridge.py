@@ -14,7 +14,8 @@ from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
 def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0,
-                energy="bhattacharyya", box_offset=(0.0, 0.0, 0.0)):
+                energy="bhattacharyya", box_offset=(0.0, 0.0, 0.0), update="cfl",
+                force_percentile=25.0):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
     and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
     required and the metrics that compare against the ground truth are None.
@@ -23,6 +24,8 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
     `box` is the initial surface, an (x, y, z) size in voxels at grid 150 (scaled with the grid); default: the MATLAB box.
     `energy` is the region energy: "bhattacharyya" (histograms inside vs outside) or "chan_vese" (means, as in the MATLAB code).
+    `update` is how the views' forces move the surface: "cfl" (total force per voxel, limited to a half-voxel step, scaled by
+    the `force_percentile`-th percentile) or "per_view" (the MATLAB code).
     `box_offset` (x, y, z in world units; z points down) moves the box, with the whole volume, away from the point the
     cameras look at.
     `box_angle` turns that box about the vertical axis (degrees). `camera_height` raises the cameras above the ring
@@ -48,7 +51,9 @@ def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, 
     images = [imnoise_salt_pepper(src[i], float(noise), rng) if noise > 0 else src[i].copy() for i in range(n)]
     if energy not in ("bhattacharyya", "chan_vese"):
         raise ValueError("unknown energy: %s" % energy)
-    cfg = Config(grid=int(grid), energy=energy)
+    if update not in ("cfl", "per_view"):
+        raise ValueError("unknown update rule: %s" % update)
+    cfg = Config(grid=int(grid), energy=energy, update=update, force_percentile=float(force_percentile))
     if focal is not None:
         cfg.focal = float(focal)
     if box is not None:
@@ -94,7 +99,7 @@ def step(solver, k):
 
 def set_param(solver, name, value):
     """Change a solver setting while it runs (applies from the next iteration)."""
-    if name not in ("curvature_weight", "sussman_dt", "sussman_every", "narrow_band_high"):
+    if name not in ("curvature_weight", "sussman_dt", "sussman_every", "narrow_band_high", "force_percentile"):
         raise ValueError("unknown parameter: " + name)
     setattr(solver.cfg, name, int(value) if name == "sussman_every" else float(value))
 

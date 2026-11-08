@@ -283,8 +283,8 @@ def test_rgb_with_identical_channels_matches_grayscale():
     gt = np.zeros((80, 50)); gt[20:60, 15:35] = 1
     gray = (60 + 120 * gt + rng.integers(0, 30, gt.shape)).astype(np.uint8)       # no zeros anywhere
     rgb = np.repeat(gray[:, :, None], 3, axis=2)
-    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0))
-    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0))
+    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="per_view"))
+    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="per_view"))
     for _ in range(5):
         ra, rb = a.step(), b.step()
         assert np.isclose(rb["energy"], 3 * ra["energy"], rtol=1e-9)
@@ -349,3 +349,34 @@ def test_bhattacharyya_solver_runs_and_chan_vese_is_still_there():
         assert all(np.isfinite(o["energy"]) for o in out)
     s = Solver(imgs, gts, Config(grid=40, focal=130.0))
     assert s.cfg.energy == "bhattacharyya" and s.step()["energy"] <= 0.0
+
+
+def test_rgb_with_identical_channels_matches_grayscale_with_the_cfl_update():
+    """Same equivalence under the CFL update rule, looser: its steps are larger, so the tiny numerical differences
+    between the two paths can flip a voxel here and there, but the runs must stay close."""
+    rng = np.random.default_rng(2)
+    gt = np.zeros((80, 50)); gt[20:60, 15:35] = 1
+    gray = (60 + 120 * gt + rng.integers(0, 30, gt.shape)).astype(np.uint8)
+    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="cfl"))
+    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="cfl"))
+    for _ in range(5):
+        ra, rb = a.step(), b.step()
+        assert np.isclose(rb["energy"], 3 * ra["energy"], rtol=0.05)
+    assert abs(int((a.phi >= 0).sum()) - int((b.phi >= 0).sum())) <= 0.05 * int((a.phi >= 0).sum())
+
+
+def test_cfl_update_never_moves_a_voxel_more_than_the_bound_and_per_view_does():
+    """The point of the rule: whatever the number of views, one iteration moves phi by at most cfl voxels (before the
+    local re-initialisation, so compare with that switched off). The MATLAB per-view rule does not guarantee it."""
+    imgs, gts = _synthetic()
+    moved = {}
+    for update in ("cfl", "per_view"):
+        s = Solver(imgs, gts, Config(grid=40, focal=130.0, update=update, sussman_every=10 ** 9))
+        s.step()                                          # iteration 1 re-initialises (it % every == 1): look at the next ones
+        worst = 0.0
+        for _ in range(4):
+            before = s.phi.copy(); s.step(); worst = max(worst, float(np.abs(s.phi - before).max()))
+        moved[update] = worst
+    assert moved["cfl"] <= 0.5 + 1e-9
+    assert moved["per_view"] > 0.5                        # the MATLAB rule moves some voxel by several steps at once
