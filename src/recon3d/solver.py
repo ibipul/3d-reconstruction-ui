@@ -327,9 +327,13 @@ class Solver:
         if idx.size == 0:
             return
         a = acc[idx]
-        scale = np.percentile(np.abs(a), self.cfg.force_percentile)
+        mag = np.abs(a)
+        peak = mag.max()
+        # Voxels with no force at all (for phi_hat: wherever the two silhouettes already agree) must not set the scale,
+        # or at 25 % zeros the percentile is 0 and everything else would crawl at max-scaling. Count only real forces.
+        scale = np.percentile(mag[mag > 1e-9 * peak], self.cfg.force_percentile) if peak > 0 else 0.0
         if not scale > 0:
-            scale = np.abs(a).max()
+            scale = peak
         if not scale > 0:                       # every force cancelled exactly: nothing moves
             return
         pf[idx] += np.clip(self.cfg.cfl * a / scale, -self.cfg.cfl, self.cfg.cfl)
