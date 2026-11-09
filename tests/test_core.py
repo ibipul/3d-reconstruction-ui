@@ -283,8 +283,8 @@ def test_rgb_with_identical_channels_matches_grayscale():
     gt = np.zeros((80, 50)); gt[20:60, 15:35] = 1
     gray = (60 + 120 * gt + rng.integers(0, 30, gt.shape)).astype(np.uint8)       # no zeros anywhere
     rgb = np.repeat(gray[:, :, None], 3, axis=2)
-    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0))
-    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0))
+    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="per_view"))
+    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="per_view"))
     for _ in range(5):
         ra, rb = a.step(), b.step()
         assert np.isclose(rb["energy"], 3 * ra["energy"], rtol=1e-9)
@@ -300,3 +300,83 @@ def test_rgb_channels_are_weighted_independently():
     mask = np.zeros((10, 10), bool); mask[2:6, 2:6] = True
     mi, mo = get_image_stat(img, mask)
     assert (mi == [100, 150, 200]).all() and (mo == [100, 150, 200]).all()
+
+
+# ---------------------------------------------------------------- Bhattacharyya energy
+def _two_region_image(rng, n=60):
+    img = rng.integers(0, 256, (n, n), dtype=np.uint8)
+    img[:, : n // 2] = rng.integers(0, 90, (n, n // 2))       # dark half
+    img[:, n // 2:] = rng.integers(130, 256, (n, n - n // 2))  # bright half
+    return img
+
+
+def test_bhattacharyya_energy_is_ln_b_and_orders_segmentations():
+    rng = np.random.default_rng(0)
+    img = _two_region_image(rng)
+    good = np.zeros(img.shape, bool); good[:, 30:] = True      # the bright half
+    bad = np.zeros(img.shape, bool); bad[:, 15:45] = True      # straddles both
+    lnb = {}
+    for name, m in (("good", good), ("bad", bad)):
+        hi, ho = sil.image_histograms(img, m, 32)
+        lnb[name], _ = sil.bhattacharyya_tables(hi, ho)
+    assert lnb["good"] < lnb["bad"] <= 0                       # more different distributions: lower ln B
+    same = sil.image_histograms(img, np.zeros(img.shape, bool), 32)
+    assert sil.bhattacharyya_tables(*same)[0] == 0.0            # an empty inside: no energy, no force
+
+
+def test_bhattacharyya_force_is_the_gradient_of_ln_b():
+    """Moving boundary pixels from outside to inside changes ln B by minus the sum of their forces (first order)."""
+    rng = np.random.default_rng(1)
+    img = _two_region_image(rng, 80)
+    base = np.zeros(img.shape, bool); base[:, 50:] = True
+    hi, ho = sil.image_histograms(img, base, 32)
+    lnb0, tab = sil.bhattacharyya_tables(hi, ho, force_scale=None)
+    pred, act = [], []
+    for _ in range(8):
+        m = base.copy()
+        ys = rng.integers(0, 80, 40); xs = rng.integers(40, 50, 40)           # a few pixels next to the edge
+        m[ys, xs] = True
+        pred.append(-sum(tab[0][(int(img[y, x]) * 32) // 256] for y, x in set(zip(ys, xs)) if not base[y, x]))
+        act.append(sil.bhattacharyya_tables(*sil.image_histograms(img, m, 32), force_scale=None)[0] - lnb0)
+    assert np.corrcoef(pred, act)[0, 1] > 0.98
+
+
+def test_bhattacharyya_solver_runs_and_chan_vese_is_still_there():
+    imgs, gts = _synthetic()
+    for energy in ("bhattacharyya", "chan_vese"):
+        s = Solver(imgs, gts, Config(grid=40, focal=130.0, energy=energy))
+        out = [s.step() for _ in range(4)]
+        assert all(np.isfinite(o["energy"]) for o in out)
+    s = Solver(imgs, gts, Config(grid=40, focal=130.0))
+    assert s.cfg.energy == "chan_vese" and s.cfg.update == "cfl" and s.cfg.force_percentile == 25 and s.step()["energy"] <= 0.0
+
+
+def test_rgb_with_identical_channels_matches_grayscale_with_the_cfl_update():
+    """Same equivalence under the CFL update rule, looser: its steps are larger, so the tiny numerical differences
+    between the two paths can flip a voxel here and there, but the runs must stay close."""
+    rng = np.random.default_rng(2)
+    gt = np.zeros((80, 50)); gt[20:60, 15:35] = 1
+    gray = (60 + 120 * gt + rng.integers(0, 30, gt.shape)).astype(np.uint8)
+    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    a = Solver([gray] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="cfl"))
+    b = Solver([rgb] * 36, [gt] * 36, Config(grid=40, focal=130.0, update="cfl"))
+    for _ in range(5):
+        ra, rb = a.step(), b.step()
+        assert np.isclose(rb["energy"], 3 * ra["energy"], rtol=0.05)
+    assert abs(int((a.phi >= 0).sum()) - int((b.phi >= 0).sum())) <= 0.05 * int((a.phi >= 0).sum())
+
+
+def test_cfl_update_never_moves_a_voxel_more_than_the_bound_and_per_view_does():
+    """The point of the rule: whatever the number of views, one iteration moves phi by at most cfl voxels (before the
+    local re-initialisation, so compare with that switched off). The MATLAB per-view rule does not guarantee it."""
+    imgs, gts = _synthetic()
+    moved = {}
+    for update in ("cfl", "per_view"):
+        s = Solver(imgs, gts, Config(grid=40, focal=130.0, update=update, sussman_every=10 ** 9))
+        s.step()                                          # iteration 1 re-initialises (it % every == 1): look at the next ones
+        worst = 0.0
+        for _ in range(4):
+            before = s.phi.copy(); s.step(); worst = max(worst, float(np.abs(s.phi - before).max()))
+        moved[update] = worst
+    assert moved["cfl"] <= 0.5 + 1e-9
+    assert moved["per_view"] > 0.5                        # the MATLAB rule moves some voxel by several steps at once

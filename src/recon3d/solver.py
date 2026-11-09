@@ -39,11 +39,25 @@ class Config:
     grid: int = 100               # voxels per side (MATLAB: 150)
     focal: float = 520.0          # rec_error_trace: f = 520
     rec_length_ref: int = 80      # at grid 150
+    init_box_angle: float = 0.0   # degrees: the initial box turned about the vertical axis (only with init_box)
+    camera_height: float = 0.0    # world units: the cameras raised above the ring plane (the MATLAB setups are level)
+    init_box_offset: tuple = (0.0, 0.0, 0.0)  # world units: where the box (and the volume) sits relative to the point the cameras look at
+    init_box: tuple | None = None  # initial surface: (x, y, z) size in voxels at grid 150; None = the MATLAB box (20, 60, 80)
     narrow_band_high: float = 5.0
     sussman_every: int = 5
     sussman_dt: float = 0.5
     curvature_weight: float = 0.001
     eps_visibility: float = 120.0
+    update: str = "cfl"           # how the views' forces move the surface: "cfl" (summed over the views, then limited as a whole)
+                                  # or "per_view" (the MATLAB code: each view normalised to a half-voxel step on its own)
+    cfl: float = 0.5              # the most any voxel of phi may move in one iteration (voxels): the CFL bound
+    force_percentile: float = 25.0  # "cfl": the total force at this percentile of the moving voxels is scaled to the full cfl step
+    energy: str = "chan_vese"     # region energy: "chan_vese" (means, as in the MATLAB code) or "bhattacharyya" (histograms)
+    hist_bins: int = 32           # Bhattacharyya: intensity bins per channel
+    hist_sigma: float = 1.0       # Bhattacharyya: smoothing of the histograms, in bins
+    hist_eps: float = 1e-4        # Bhattacharyya: probability floor of every bin
+    hist_balanced: bool = True    # Bhattacharyya: weigh inside and outside equally, not 1/area each: the exact area weights
+                                  # make the force much stronger just outside the true edge than just inside, so the surface drifts inward
     camera_dist: float = 4.0
     loc_scale: float = 10.0       # loaders: camera_loc = cam_mat(4,:) * 10
 
@@ -62,12 +76,13 @@ def imnoise_salt_pepper(img, density, rng):
 
 
 class Solver:
-    def __init__(self, images, gt_masks, config: Config | None = None):
+    def __init__(self, images, gt_masks=None, config: Config | None = None):
         """images: list of observed images (2D gray or 3D RGB uint8).
-        gt_masks: list of 2D {0,1} ground-truth silhouettes (for metrics only)."""
+        gt_masks: list of 2D {0,1} ground-truth silhouettes (for metrics only), or None for a dataset
+        without ground truth; the tp/tn/fp/fn/rms numbers are then None."""
         self.cfg = cfg = config or Config()
         self.images = [np.ascontiguousarray(im) for im in images]
-        self.gt = [np.asarray(g, dtype=float) for g in gt_masks]
+        self.gt = None if gt_masks is None else [np.asarray(g, dtype=float) for g in gt_masks]
         self.n_views = len(self.images)
         self.nhood = sil.disk(6)
         self.nhood_small = sil.disk(4)
@@ -78,7 +93,7 @@ class Solver:
         for i in range(self.n_views):
             img = self.images[i]
             sz = img.shape[:2]
-            cx, cy, cz, loc = cam.select_camera_auto(i + 1, cfg.camera_dist, 0.0)
+            cx, cy, cz, loc = cam.select_camera_auto(i + 1, cfg.camera_dist, -cfg.camera_height / cfg.loc_scale)   # world z points down
             loc = loc * cfg.loc_scale
             P = cam.create_projection_operator(cx, cy, cz, loc, sz, cfg.focal)
             self.views.append({
@@ -89,13 +104,24 @@ class Solver:
         # level sets
         s = cfg.scale()
         space = cfg.grid
-        rec = int(round(cfg.rec_length_ref * s))
-        if (space - rec) % 2:
-            rec += 1
-        off_a, off_b = max(int(round(30 * s)), 1), max(int(round(10 * s)), 1)
+        if cfg.init_box is None:
+            rec = int(round(cfg.rec_length_ref * s))
+            if (space - rec) % 2:
+                rec += 1
+            off_a, off_b = max(int(round(30 * s)), 1), max(int(round(10 * s)), 1)
+            rec_z = None
+        else:
+            # a box of the requested x / y / z size, centred in the volume (the solver re-centres on it anyway)
+            dx, dy, dz = (min(max(int(round(float(d) * s)), 2), space - 4) for d in cfg.init_box)
+            rec = space                                       # footprint inset from the edges of the volume
+            off_a, off_b = max((space - dx + 1) // 2, 1), max((space - dy + 1) // 2, 1)   # +1: the surface voxels (phi = 0) belong to the box
+            rec_z = dz + ((space - dz) % 2)
         # float32 above the MATLAB size keeps 200^3 / 300^3 within browser memory
         dtype = np.float64 if cfg.grid <= REF_GRID else np.float32
-        self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype)
+        if cfg.init_box is not None:
+            self.phi = ls.rotated_box_phi(space, rec, off_a, off_b, cfg.init_box_angle, dtype, rec_z=rec_z)
+        else:
+            self.phi = ls.initial_box_phi(space, rec, off_a, off_b, dtype, rec_z=rec_z)
         self.phi_hat = self.phi.copy(order="F")
         self.shape = self.phi.shape
         self.voxel_scale = REF_GRID / cfg.grid
@@ -105,6 +131,8 @@ class Solver:
         I, J, K = np.unravel_index(in_pt, self.shape, order="F")
         m = np.array([I.mean(), J.mean(), K.mean()])
         m[2] += 1.0
+        # the box centre maps to the world origin, where all cameras look; an offset moves the whole volume instead
+        m = m - np.asarray(cfg.init_box_offset, float) / self.voxel_scale
         self.m = m
 
         self.tracks = {k: [] for k in
@@ -131,6 +159,11 @@ class Solver:
         self.in_pt_hat, self.normals_hat, self.coords_hat = self._voxels(self.phi_hat, "phi_hat")
         in_sum = np.zeros(3); out_sum = np.zeros(3)
         iin_sum = np.zeros(3); iout_sum = np.zeros(3)
+        bh = cfg.energy == "bhattacharyya"
+        if bh:
+            chans = 3 if self.images[0].ndim == 3 else 1
+            hz = lambda: np.zeros((chans, cfg.hist_bins))
+            h_in, h_out, hh_in, hh_out = hz(), hz(), hz(), hz()
         for v, view in enumerate(self.views):
             rows, cols = view["sz"]
             px, py, z = cam.project_points(self.coords, view["P"], view["sz"])
@@ -141,14 +174,21 @@ class Solver:
                                                self.nhood, cfg.eps_visibility)
             occ_h, sp_h = sil.project_phi_to_image(mask_hat, in_img_hat, view["loc"], self.coords_hat,
                                                    self.normals_hat, self.nhood, cfg.eps_visibility)
-            mi, mo = sil.get_image_stat(self.images[v], mask)
-            imi, imo = sil.get_image_stat(self.images[v], mask_hat)
-            in_sum += mi; out_sum += mo; iin_sum += imi; iout_sum += imo
+            if bh:                                           # histograms pooled over the views
+                a, b = sil.image_histograms(self.images[v], mask, cfg.hist_bins); h_in += a; h_out += b
+                a, b = sil.image_histograms(self.images[v], mask_hat, cfg.hist_bins); hh_in += a; hh_out += b
+            else:
+                mi, mo = sil.get_image_stat(self.images[v], mask)
+                imi, imo = sil.get_image_stat(self.images[v], mask_hat)
+                in_sum += mi; out_sum += mo; iin_sum += imi; iout_sum += imo
             self.cache[v] = {"mask": mask, "mask_hat": mask_hat, "occ": occ, "sil": sp,
                              "occ_hat": occ_h, "sil_hat": sp_h, "depth": z[occ]}
         n = self.n_views
         self.in_mean, self.out_mean = in_sum / n, out_sum / n
         self.iin_mean, self.iout_mean = iin_sum / n, iout_sum / n
+        if bh:
+            self.energy_value, self.force_tables = sil.bhattacharyya_tables(h_in, h_out, cfg.hist_sigma, cfg.hist_eps, balanced=cfg.hist_balanced)
+            self.ienergy_value, _ = sil.bhattacharyya_tables(hh_in, hh_out, cfg.hist_sigma, cfg.hist_eps)
 
     # ------------------------------------------------------------------ strokes
     def set_strokes(self, view: int, strokes):
@@ -168,6 +208,10 @@ class Solver:
 
         pf = self.phi.ravel(order="F")
         pf_hat = self.phi_hat.ravel(order="F")
+        cfl = cfg.update == "cfl"
+        if cfl:                                              # forces of all views are collected here, then applied once
+            acc = np.zeros(pf.size); acc_hat = np.zeros(pf_hat.size)
+            hit = np.zeros(pf.size, bool); hit_hat = np.zeros(pf_hat.size, bool)
         band = np.flatnonzero((pf >= 0) & (pf <= cfg.narrow_band_high))
         band_hat = np.flatnonzero((pf_hat >= 0) & (pf_hat <= cfg.narrow_band_high))
 
@@ -197,18 +241,27 @@ class Solver:
             Ea = mask - mask_hat
             eu = np.sign(mask_hat - (Hn - Hp))
 
-            gt = self.gt[v]
-            err = gt - mask
-            fp += int((err < 0).sum()); fn += int((err > 0).sum())
-            tp += int(((mask * gt) == 1).sum()); tn += int((((1 - mask) * (1 - gt)) == 1).sum())
-            rms += np.sqrt((err ** 2).sum())
+            if self.gt is not None:
+                gt = self.gt[v]
+                err = gt - mask
+                fp += int((err < 0).sum()); fn += int((err > 0).sum())
+                tp += int(((mask * gt) == 1).sum()); tn += int((((1 - mask) * (1 - gt)) == 1).sum())
+                rms += np.sqrt((err ** 2).sum())
             l1 = 0.5 * (Ea ** 2).sum() / tot_px
             l2 = 0.5 * (eu ** 2).sum() / tot_px
             lya += l1 + l2; lya1 += l1; lya2 += l2
 
             # image force (Chan-Vese style, per channel), flipped, depth-weighted
             img = self.images[v]
-            if img.ndim == 3:
+            if cfg.energy == "bhattacharyya":
+                # the Bhattacharyya force is already the outward speed (positive: grow); see sil.bhattacharyya_tables
+                if img.ndim == 3:
+                    t = sum(self.force_tables[k][(img[:, :, k].ravel(order="F")[img_idx].astype(np.intp) * cfg.hist_bins) // 256]
+                            for k in range(3))
+                else:
+                    t = self.force_tables[0][(img.ravel(order="F")[img_idx].astype(np.intp) * cfg.hist_bins) // 256]
+                t = -t                                     # undone by the flip below, which the Chan-Vese form needs
+            elif img.ndim == 3:
                 t = sum(-1.0 * (in_m[k] - out_m[k]) *
                         (2.0 * img[:, :, k].ravel(order="F")[img_idx].astype(float) - (in_m[k] + out_m[k]))
                         for k in range(3))
@@ -223,30 +276,67 @@ class Solver:
             ng = grad / np.max(np.abs(grad + 1e-5))
             nc = -cfg.curvature_weight * curvature / np.max(np.abs(curvature + 1e-5))
             dphi = ng + nc
-            ndphi = 0.5 * dphi / np.max(np.abs(dphi + 1e-5))
-            pf[band[ibi]] += ndphi[ioi]
+            if cfl:
+                acc[band[ibi]] += dphi[ioi]; hit[band[ibi]] = True
+            else:
+                ndphi = 0.5 * dphi / np.max(np.abs(dphi + 1e-5))
+                pf[band[ibi]] += ndphi[ioi]
 
             # phi_hat: driven by the error and the user strokes
             ea_h = Ea.ravel(order="F")[img_idx_h]
             fu_h = u.ravel(order="F")[img_idx_h]
             if ea_h.size:
                 d_hat = ea_h / np.max(np.abs(ea_h + 1e-5)) + fu_h / np.max(np.abs(fu_h + 1e-5))
-                n_hat = 0.5 * d_hat / np.max(np.abs(d_hat + 1e-5))
-                pf_hat[band_hat[ibi_h]] += n_hat[ioi_h]
+                if cfl:
+                    acc_hat[band_hat[ibi_h]] += d_hat[ioi_h]; hit_hat[band_hat[ibi_h]] = True
+                else:
+                    n_hat = 0.5 * d_hat / np.max(np.abs(d_hat + 1e-5))
+                    pf_hat[band_hat[ibi_h]] += n_hat[ioi_h]
 
-        d = self.in_mean - self.out_mean
-        di = self.iin_mean - self.iout_mean
-        energy = -float((d ** 2).sum())
-        ienergy = -float((di ** 2).sum())
+        if cfl:
+            self._apply_cfl(pf, acc, hit); self._apply_cfl(pf_hat, acc_hat, hit_hat)
+        if cfg.energy == "bhattacharyya":
+            energy, ienergy = float(self.energy_value), float(self.ienergy_value)       # ln B, <= 0
+        else:
+            d = self.in_mean - self.out_mean
+            di = self.iin_mean - self.iout_mean
+            energy = -float((d ** 2).sum())
+            ienergy = -float((di ** 2).sum())
         if it % cfg.sussman_every == 1:
             ls.sussman_local(self.phi, cfg.sussman_dt)        # in place, on the box around the object
             ls.sussman_local(self.phi_hat, cfg.sussman_dt)
 
         out = {"iter": it, "energy": energy, "ienergy": ienergy, "rms": rms, "lyapunov": lya,
                "lyap1": lya1, "lyap2": lya2, "tp": tp, "tn": tn, "fp": fp, "fn": fn}
+        if self.gt is None:                                   # no ground truth: these numbers do not exist
+            for k in ("rms", "tp", "tn", "fp", "fn"):
+                out[k] = None
         for k in self.tracks:
             self.tracks[k].append(out[k])
         return out
+
+    def _apply_cfl(self, pf, acc, hit):
+        """Move phi by the total force `acc` of all views, never by more than `cfg.cfl` voxels in one iteration.
+
+        The MATLAB code scaled each view's force to a half-voxel step on its own, so a voxel seen by many views could move
+        several voxels at once (against the CFL bound), while most voxels moved a few hundredths because one outlier
+        set each view's scale. Here the views are summed first; the force at the `force_percentile` of the moving voxels
+        is scaled to the full `cfl` step and anything stronger is clipped to it, so the bound holds exactly and a typical
+        voxel uses most of it."""
+        idx = np.flatnonzero(hit)              # voxels that received a force (not merely a nonzero sum: cancellations are noise)
+        if idx.size == 0:
+            return
+        a = acc[idx]
+        mag = np.abs(a)
+        peak = mag.max()
+        # Voxels with no force at all (for phi_hat: wherever the two silhouettes already agree) must not set the scale,
+        # or at 25 % zeros the percentile is 0 and everything else would crawl at max-scaling. Count only real forces.
+        scale = np.percentile(mag[mag > 1e-9 * peak], self.cfg.force_percentile) if peak > 0 else 0.0
+        if not scale > 0:
+            scale = peak
+        if not scale > 0:                       # every force cancelled exactly: nothing moves
+            return
+        pf[idx] += np.clip(self.cfg.cfl * a / scale, -self.cfg.cfl, self.cfg.cfl)
 
     # ------------------------------------------------------------------ views for the UI
     def outline(self, v: int, hat: bool = False):

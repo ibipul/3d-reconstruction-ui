@@ -1,0 +1,11 @@
+{
+ "samples": [
+  {
+   "file": "reaper-polar-2026-11-08.json",
+   "title": "reaper 2d interactions",
+   "description": "250 strokes (110 inside, 140 outside) on 29 of the 36 views, drawn between iterations 0 and 912. Recorded with the photos as input, Chan-Vese energy, the CFL update (force percentile 25), smoothing 0.386 and re-init every 5 / step 0.5, at grid 300. The camera and starting box were not saved with it, so the dataset's own settings apply. Plug in adds it to the current run; Play re-initialises with those settings and replays it.",
+   "strokes": 250,
+   "default": true
+  }
+ ]
+}

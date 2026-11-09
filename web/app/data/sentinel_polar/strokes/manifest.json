@@ -1,5 +1,4 @@
 {
- "dataset": "dataset25 photos / dataset_sentinel_gt (sentinel)",
  "samples": [
   {
    "file": "dataset25-sentinel-strokes-minimal.json",

@@ -1,0 +1,73 @@
+{
+ "default": "sentinel_polar",
+ "datasets": [
+  {
+   "id": "sentinel_polar",
+   "title": "sentinel_polar (synthetic drone, with ground truth)",
+   "dir": "sentinel_polar",
+   "photoExt": "png",
+   "gt": true,
+   "views": 36,
+   "width": 200,
+   "height": 320,
+   "angleStart": 3,
+   "angleStep": 10,
+   "focal": 520,
+   "distance": 160,
+   "cameraHeight": 0,
+   "keepCentred": false,
+   "box": [20, 60, 80],
+   "boxAngle": 0,
+   "boxOffset": [0, 0, 0],
+   "note": "The MATLAB repo's dataset25 photos with the dataset_sentinel_gt silhouettes as ground truth. Level cameras on a ring at 10 degree steps."
+  },
+  {
+   "id": "reaper_polar",
+   "title": "reaper_polar (synthetic drone, no ground truth)",
+   "dir": "reaper_polar",
+   "photoExt": "png",
+   "gt": false,
+   "views": 36,
+   "width": 232,
+   "height": 320,
+   "angleStart": 3,
+   "angleStep": 10,
+   "focal": 450,
+   "distance": 150,
+   "cameraHeight": 0,
+   "keepCentred": false,
+   "box": [25, 60, 80],
+   "boxAngle": 0,
+   "boxOffset": [0, 0, 0],
+   "run": {
+    "energy": "chan_vese",
+    "update": "cfl",
+    "forcePercentile": 25,
+    "curvatureWeight": 0.3857,
+    "reinitEvery": 5,
+    "reinitDt": 0.5
+   },
+   "note": "Synthetic polar renders (290x400 shrunk to 232x320, the height of the sentinel images). Same camera ring as sentinel_polar, with this set's own starting values: camera distance 150, focal 450, level cameras, a starting box 25 wide, 60 deep and 80 tall; the run settings (Chan-Vese, CFL update, smoothing 0.386, re-init every 5 / step 0.5) are those of the saved 'reaper 2d interactions' session. There are no ground-truth silhouettes, so IoU, false positives/negatives and RMS error are not available."
+  },
+  {
+   "id": "zebra",
+   "title": "zebra (real photos, no ground truth)",
+   "dir": "zebra",
+   "photoExt": "jpg",
+   "gt": false,
+   "views": 36,
+   "width": 320,
+   "height": 216,
+   "angleStart": 3,
+   "angleStep": 10,
+   "focal": 500,
+   "distance": 300,
+   "cameraHeight": 0,
+   "keepCentred": true,
+   "box": [82, 150, 95],
+   "boxAngle": -5,
+   "boxOffset": [0, 0, 0],
+   "note": "Real turntable photos (684x461 originals shrunk to 320x216). There are no silhouettes, so IoU, false positives/negatives and RMS error are not available. Settings tuned by hand for this set: camera distance 300, focal 500, level cameras, a starting box 82 wide, 150 deep and 95 tall turned by -5 degrees. Use the up / x / y shift (or the Move box tool in an opened view) to place the box. A depth of 150 fills the whole volume in y, so the surface cannot grow further that way."
+  }
+ ]
+}

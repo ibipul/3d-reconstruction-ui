@@ -13,34 +13,68 @@ from .data import gt_mask_from_gray
 from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
-def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None):
+def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0,
+                energy="chan_vese", box_offset=(0.0, 0.0, 0.0), update="cfl",
+                force_percentile=25.0):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
-    and, by default, as the solver's input.
+    and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then
+    required and the metrics that compare against the ground truth are None.
+
+    `focal` (pixels) and `distance` (camera distance from the object in world units, default 160) are free
+    parameters of the camera ring. The distance sets how large the object looks compared with the initial surface.
+    `box` is the initial surface, an (x, y, z) size in voxels at grid 150 (scaled with the grid); default: the MATLAB box.
+    `energy` is the region energy: "bhattacharyya" (histograms inside vs outside) or "chan_vese" (means, as in the MATLAB code).
+    `update` is how the views' forces move the surface: "cfl" (total force per voxel, limited to a half-voxel step, scaled by
+    the `force_percentile`-th percentile) or "per_view" (the MATLAB code).
+    `box_offset` (x, y, z in world units; z points down) moves the box, with the whole volume, away from the point the
+    cameras look at.
+    `box_angle` turns that box about the vertical axis (degrees). `camera_height` raises the cameras above the ring
+    plane (world units, positive = above the object).
 
     As in loader_wt_control_rec_error_trace.m, the observed image is the ground truth plus salt &
     pepper noise of density `noise`. If `photo_bytes` (n * rows * cols * 3 uint8 RGB) is given, the
     solver runs on the photos instead, on all three channels (the `length(size(img))==3` branch of
     the MATLAB loaders); noise is then applied to each channel independently.
     """
-    g = np.frombuffer(bytes(gray_bytes), dtype=np.uint8).reshape(n, rows, cols)
     rng = np.random.default_rng(int(seed))
-    masks = [gt_mask_from_gray(g[i]) for i in range(n)]
+    if gray_bytes is None:
+        if photo_bytes is None:
+            raise ValueError("a dataset without ground truth needs photos")
+        g = masks = None
+    else:
+        g = np.frombuffer(bytes(gray_bytes), dtype=np.uint8).reshape(n, rows, cols)
+        masks = [gt_mask_from_gray(g[i]) for i in range(n)]
     if photo_bytes is not None:
         src = np.frombuffer(bytes(photo_bytes), dtype=np.uint8).reshape(n, rows, cols, 3)
     else:
         src = g
     images = [imnoise_salt_pepper(src[i], float(noise), rng) if noise > 0 else src[i].copy() for i in range(n)]
-    solver = Solver(images, masks, Config(grid=int(grid)))
+    if energy not in ("bhattacharyya", "chan_vese"):
+        raise ValueError("unknown energy: %s" % energy)
+    if update not in ("cfl", "per_view"):
+        raise ValueError("unknown update rule: %s" % update)
+    cfg = Config(grid=int(grid), energy=energy, update=update, force_percentile=float(force_percentile))
+    if focal is not None:
+        cfg.focal = float(focal)
+    if box is not None:
+        cfg.init_box = tuple(float(b) for b in box)
+        cfg.init_box_angle = float(box_angle)
+    cfg.camera_height = float(camera_height)
+    cfg.init_box_offset = tuple(float(v) for v in box_offset)
+    if distance is not None:
+        cfg.camera_dist = float(distance) / (4.0 * cfg.loc_scale)     # camera_dist 4 <-> 160 world units
+    solver = Solver(images, masks, cfg)
     solver._bridge_masks = masks
     return solver
 
 
 def inputs_bytes(solver):
-    """(observed images, ground-truth masks, channels). Images are uint8, shape (n, rows, cols) or
+    """(observed images, ground-truth masks or b"" without ground truth, channels). Images are uint8, shape (n, rows, cols) or
     (n, rows, cols, 3); masks are 0/1, shape (n, rows, cols)."""
     imgs = np.stack(solver.images).astype(np.uint8)
-    gts = np.stack(solver._bridge_masks).astype(np.uint8)
-    return imgs.tobytes(), gts.tobytes(), (3 if imgs.ndim == 4 else 1)
+    masks = solver._bridge_masks
+    gts = b"" if masks is None else np.stack(masks).astype(np.uint8).tobytes()      # empty: no ground truth
+    return imgs.tobytes(), gts, (3 if imgs.ndim == 4 else 1)
 
 
 def set_strokes(solver, view, strokes_json):
@@ -65,7 +99,7 @@ def step(solver, k):
 
 def set_param(solver, name, value):
     """Change a solver setting while it runs (applies from the next iteration)."""
-    if name not in ("curvature_weight", "sussman_dt", "sussman_every", "narrow_band_high"):
+    if name not in ("curvature_weight", "sussman_dt", "sussman_every", "narrow_band_high", "force_percentile"):
         raise ValueError("unknown parameter: " + name)
     setattr(solver.cfg, name, int(value) if name == "sussman_every" else float(value))
 
@@ -87,6 +121,25 @@ def export_model(solver, fmt, hat=False):
     return meshio.write(fmt, verts, normals, tris, comment)
 
 
+def _outline_parts(solver):
+    parts = []
+    for v in range(solver.n_views):
+        for hat in (False, True):
+            seg = solver.outline_segments(v, hat)
+            parts += [np.array([len(seg)], np.float32), seg.ravel()]
+    return np.concatenate(parts).astype(np.float32).tobytes()
+
+
+def preview(n, rows, cols, grid, focal, distance, box, box_angle, camera_height, box_offset=(0.0, 0.0, 0.0)):
+    """The starting surface as outlines in every view plus its mesh, without photos or a run: a cheap look at the
+    camera and initial-box settings while they are being tuned. Done at a coarse `grid`; the box has the same size
+    in world units at any grid, so it matches the real run up to voxel rounding. Returns (outlines, mesh) bytes."""
+    blank = np.zeros(n * rows * cols * 3, np.uint8).tobytes()
+    s = init_solver(None, n, rows, cols, grid, 0.0, 0, blank, focal, distance, box, box_angle, camera_height,
+                    box_offset=box_offset)
+    return _outline_parts(s), _mesh_bytes(s.surface_mesh(False))
+
+
 def snapshot(solver):
     """(outlines, mesh, mesh_hat) as bytes.
 
@@ -94,10 +147,4 @@ def snapshot(solver):
     segments in pixel-centre coordinates. A mesh is int32 [n_vertices, n_triangles] followed by
     float32 vertices (n,3), float32 normals (n,3) and uint32 triangles (m,3).
     """
-    parts = []
-    for v in range(solver.n_views):
-        for hat in (False, True):
-            seg = solver.outline_segments(v, hat)
-            parts += [np.array([len(seg)], np.float32), seg.ravel()]
-    outlines = np.concatenate(parts).astype(np.float32)
-    return (outlines.tobytes(), _mesh_bytes(solver.surface_mesh(False)), _mesh_bytes(solver.surface_mesh(True)))
+    return (_outline_parts(solver), _mesh_bytes(solver.surface_mesh(False)), _mesh_bytes(solver.surface_mesh(True)))

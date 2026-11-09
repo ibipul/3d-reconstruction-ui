@@ -121,19 +121,47 @@ def signed_distance(mask):
 # Memory-lean variants for large grids (200^3, 300^3). Same results as the full-grid
 # functions above wherever the result matters (near the surface and inside the object).
 # ----------------------------------------------------------------------------------------
-def initial_box_extent(space_length: int, rec_length: int, off_a: int, off_b: int):
+def initial_box_extent(space_length: int, rec_length: int, off_a: int, off_b: int, rec_z: int | None = None):
     """Inclusive 0-based voxel ranges (i0, i1, j0, j1, k0, k1) of the initial box, and the volume depth.
-    Same box as `initial_box`."""
+    Same box as `initial_box`. `rec_z` (default `rec_length`) makes the box's height independent of its footprint."""
     nb = (space_length - rec_length) // 2
     start, end = nb, rec_length + nb
     i0, i1 = start + off_a - 1, end - off_a - 1
     j0, j1 = start + off_b - 1, end - off_b - 1
-    k0, k1 = nb + 1, nb + 1 + rec_length
-    depth = (nb + 1) + (rec_length + 1) + (nb + 1)
+    rz = rec_length if rec_z is None else rec_z
+    nbz = (space_length - rz) // 2
+    k0, k1 = nbz + 1, nbz + 1 + rz
+    depth = (nbz + 1) + (rz + 1) + (nbz + 1)
     return (i0, i1, j0, j1, k0, k1), depth
 
 
-def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, dtype=np.float64, slab: int = 24):
+def rotated_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, angle_deg: float, dtype=np.float64,
+                    slab: int = 24, rec_z: int | None = None):
+    """Signed distance (>= 0 inside) of the initial box turned by `angle_deg` about the vertical axis through its centre.
+
+    Same box and centre as `initial_box_phi`, and at angle 0 the same values. The distance is the exact one for a
+    box measured from the voxel centres: inside, the distance to the nearest face; outside, minus the distance to the box.
+    """
+    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b, rec_z)
+    cx, cy = 0.5 * (i0 + i1), 0.5 * (j0 + j1)
+    hx, hy, hz = 0.5 * (i1 - i0), 0.5 * (j1 - j0), 0.5 * (k1 - k0)
+    wz = np.abs(np.arange(depth, dtype=np.float64) - 0.5 * (k0 + k1))[None, None, :]
+    jj = np.arange(space_length, dtype=np.float64)[None, :, None] - cy
+    c, sn = np.cos(np.deg2rad(angle_deg)), np.sin(np.deg2rad(angle_deg))
+    out = np.empty((space_length, space_length, depth), dtype=dtype, order="F")
+    for s in range(0, space_length, slab):
+        ii = np.arange(s, min(s + slab, space_length), dtype=np.float64)[:, None, None] - cx
+        u = np.abs(c * ii + sn * jj)             # coordinates in the box's own frame
+        v = np.abs(-sn * ii + c * jj)
+        ox, oy, oz = np.maximum(u - hx, 0.0), np.maximum(v - hy, 0.0), np.maximum(wz - hz, 0.0)
+        outside = np.sqrt(ox * ox + oy * oy + oz * oz)
+        inside = np.minimum(np.minimum(hx - u, hy - v), hz - wz)
+        out[s:s + slab] = np.where(outside > 0, -outside, inside)
+    return out
+
+
+def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, dtype=np.float64, slab: int = 24,
+                    rec_z: int | None = None):
     """Signed distance of the initial box, computed analytically (no mask volume, no EDT).
 
     For an axis-aligned box of voxels the Euclidean distance transform has a closed form:
@@ -142,7 +170,7 @@ def initial_box_phi(space_length: int, rec_length: int, off_a: int, off_b: int, 
     face. This equals `signed_distance(initial_box(...))` exactly, and is built slab by slab so
     the peak memory stays near the size of the result.
     """
-    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b)
+    (i0, i1, j0, j1, k0, k1), depth = initial_box_extent(space_length, rec_length, off_a, off_b, rec_z)
     nx = ny = space_length
     out = np.empty((nx, ny, depth), dtype=dtype, order="F")
     j = np.arange(ny, dtype=np.float64)[None, :, None]

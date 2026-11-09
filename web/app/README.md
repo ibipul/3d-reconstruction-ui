@@ -18,6 +18,85 @@ Open http://localhost:8000/web/app/. It must be served over HTTP: as a `file://`
 blocks the worker and image decoding. The first load downloads Pyodide, NumPy and SciPy from the
 jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 
+## Update rule (CFL)
+
+How the forces of the 36 views move the surface is the **Update** setting (change it, then *Re-initialise*).
+
+φ is kept close to a distance function, so one iteration may move it by at most half a voxel (the CFL bound) or the
+explicit update becomes unstable.
+
+- **CFL-limited (summed)**, the default: each view's force is added up per voxel, and the total is limited as a whole. The
+  total force at the *Force percentile* of the moving voxels is scaled to the full half-voxel step, and anything stronger is
+  clipped to it. So the bound holds exactly, and a typical silhouette voxel uses most of the step. A lower percentile moves
+  more voxels at the full step; 100 scales by the strongest voxel. It can be changed while the run goes.
+- **MATLAB (per view)**: each view is scaled to a half-voxel step on its own and the results are added. A voxel seen by
+  many views can then move several voxels in one iteration (measured: up to 3.9 on sentinel_polar, 2,000+ voxels above
+  0.5 in the first iteration), and because the scale is set by one outlier pixel per view, most voxels move only
+  hundredths of a voxel (median 0.01 for Bhattacharyya).
+
+On sentinel_polar (RGB photos, grid 100, 200 iterations) the best IoU against the ground truth was 0.40 for Bhattacharyya
+under the MATLAB rule and 0.69 under the CFL rule (percentile 25), and for Chan-Vese 0.83 and 0.85. The shipped replay was recorded
+under the MATLAB rule, so Play switches to it.
+
+## Energy
+
+The **Energy** setting chooses the region energy the surface descends (change it, then *Re-initialise*):
+
+- **Bhattacharyya**: the energy is ln B, with B = Σ √(p_in · p_out) over the smoothed colour histograms of the
+  pixels inside and outside the surface (32 bins per channel, pooled over all views; with RGB the channels are summed).
+  B is 1 when the two histograms are equal and falls toward 0 as they separate, so the energy goes down as the inside and
+  outside look more different. The force on each boundary pixel is the gradient of B (Michailovich, Rathi and
+  Tannenbaum 2007): a pixel is pushed in if its colour is common outside and rare inside, and out in the opposite case.
+  One departure from the exact gradient: it weighs inside and outside equally instead of by 1/area each. With the area
+  weights the force just outside the true edge is much stronger than just inside it (the inside is the smaller region),
+  and the surface drifts inward. The forces are also scaled to the range of the Chan-Vese ones, because the MATLAB
+  normalisations carry fixed stabilising constants.
+- **Chan-Vese** (default): the MATLAB code's energy, which compares only the mean colour inside and outside.
+
+The *Energy* trace shows ln B (at most 0) for Bhattacharyya and minus the squared difference of the means for Chan-Vese,
+so the two are not comparable with each other.
+
+## Datasets
+
+The **Dataset** picker (or `?dataset=zebra` in the URL) switches between the photo sets listed in `data/datasets.json`:
+
+| Dataset | Photos | Ground truth |
+|---|---|---|
+| `sentinel_polar` | 36 synthetic views, 200×320 | yes: IoU, FP/FN and RMS error are shown |
+| `reaper_polar` | 36 synthetic renders, 232×320 (shrunk from 290×400) | no: same as zebra below; has its own camera, box and run settings and a saved 'reaper 2d interactions' replay |
+| `zebra` | 36 real photos, 320×216 | no: the *Silhouettes + noise* input, the *Ground truth* view and the IoU / FP+FN / RMS traces are disabled; energy and Lyapunov remain |
+
+Every dataset starts from the same camera ring as the MATLAB code (level cameras, 10° steps). These settings are free
+parameters, taken from `datasets.json` when you pick a dataset and editable before you press Run:
+
+- **Distance**: camera distance in world units (160 for sentinel_polar).
+- **Focal**: focal length in pixels of the (shrunk) images (520 at 320 px high for sentinel_polar).
+- **Camera height**: the cameras raised above the ring plane, in world units (0 = level; positive = looking down on the object).
+- **Keep box centred** (next to Camera height): raising the cameras also moves the box down in every view, by about
+  focal × height ÷ distance pixels. With this on, a change of Camera height moves the box's *up* shift by the same
+  amount, so the box stays put and only the viewing angle changes. It acts only when you change the height, so your own
+  up shift is kept, and the match is approximate (1–3 px at heights up to 60). On by default for zebra.
+- **Initial box** width / depth / height: the size of the box the surface starts as, in voxels at grid 150 (scaled with the
+  grid; the MATLAB box is 20 × 60 × 80), and **angle**, which turns the box about the vertical axis (it matters because
+  width and depth differ).
+
+- **Box shift** x / y / up: moves the box, with the whole volume, away from the point the cameras look at, in world units
+  (steps of 1). In an opened view, the **Move starting box** arrows move it in small steps in that view's image plane
+  (0.5, 1, 2, 5 or 10 pixels of that view per click; `Shift`+arrow keys do the same, plain arrows still switch views).
+  With level cameras, up and down are the world's vertical axis in every view. Strokes only act where the outline passes
+  through them, so put the box over the part you want to grow before you draw.
+
+Each dataset has its own values for all of these in `data/datasets.json` (`distance`, `focal`, `cameraHeight`, `box`,
+`boxAngle`, `boxOffset`), applied when you pick it. To set them for a dataset, tune in the page, press **Copy settings**
+(it copies the JSON entry for the dataset), and paste the values into `datasets.json`. **Reset to defaults** goes back to
+the listed values.
+
+Every change redraws the starting surface straight away: as a bold outline on all the views (and the open view) and as the
+box in the 3D panel, using a quick coarse-grid preview. The real run is re-initialised once you stop typing for about a
+second and a half. Tune until the outline sits just around the object in every view, then Run. Interaction replays
+ship with their dataset (`data/<dataset>/strokes/` and its `manifest.json`; zebra has none, so its replay controls are hidden); a strokes file drawn on one dataset is refused on another.
+To add a dataset, put `photos/1..N.<ext>` (and `gt/1..N.png` if it has ground truth) in `data/<name>/` and add an entry to `datasets.json`.
+
 ## What you see
 
 - **Grid:** the 36 views. *Show* switches between the photo, what the solver sees (the *Input* setting:
@@ -26,7 +105,7 @@ jsDelivr CDN (about 30 MB, cached afterwards), so it needs internet access.
 - **Click a card** to focus it. Pick **Inside** or **Outside** and draw. Strokes are sent to the
   solver and steer φ̂ from the next iteration (positive = inside, negative = outside, as in
   `erase_from.m` / `interact_to.m`).
-- **Sidebar:** the zero level set of φ as a lit surface (drag to orbit, scroll to zoom, **Enlarge** for a wider
+- **Sidebar:** the zero level set of φ as a lit surface (shown upright; drag to orbit, scroll to zoom, **Enlarge** for a wider
   panel; optional φ̂ wireframe), a compact ring marking the camera angles, and traces (energy, IoU against
   the ground truth, FP+FN, RMS error, Lyapunov). Outlines on the cards are smoothed sub-pixel contours.
 
@@ -54,7 +133,7 @@ the iteration, e.g. `recon-100grid-120it-phi.obj`. The same files can be written
 
 ## Interaction replay
 
-`data/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the
+`data/sentinel_polar/strokes/` holds the interaction replay recorded for this dataset (`manifest.json` lists it, and it is preselected in the
 **Strokes** row): a hand-drawn session on `dataset25` (the sentinel), 290 strokes (95 inside, 195 outside) on all 36 views, 177 of
 them at the start and 113 more between iterations 152 and 1099. It was recorded with the **RGB photos** as input, smoothing 0.398
 and the loader's re-initialisation (every 5, step 0.5), at grid 300.
@@ -67,7 +146,7 @@ and the loader's re-initialisation (every 5, step 0.5), at grid 300.
 - **Clear all** removes every stroke. **Re-run** (next to Save and Load) re-initialises and re-applies *your own* strokes at the
   iterations you drew them at. Plugged and played strokes are saved and re-run like hand-drawn ones.
 
-To add another replay, save a session from the app (**Save**), drop the file into `data/strokes/` and list it in `manifest.json`.
+To add another replay, save a session from the app (**Save**), drop the file into the dataset's `strokes/` folder and list it in `manifest.json`.
 
 Strokes are in image pixels, so a replay recorded at one grid size plugs into a run at any other. The timing does not carry over
 exactly, though: a coarser grid evolves faster per iteration, and not by a fixed ratio (in a test, a 3x coarser run matched the fine
