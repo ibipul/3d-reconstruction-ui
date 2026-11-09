@@ -33,7 +33,7 @@
    "angleStart": 3,
    "angleStep": 10,
    "focal": 450,
-   "distance": 250,
+   "distance": 150,
    "cameraHeight": 0,
    "keepCentred": false,
    "box": [25, 60, 80],
@@ -47,7 +47,7 @@
     "reinitEvery": 5,
     "reinitDt": 0.5
    },
-   "note": "Synthetic polar renders (290x400 shrunk to 232x320, the height of the sentinel images). Same camera ring as sentinel_polar, with this set's own starting values: camera distance 250, focal 450, level cameras, a starting box 25 wide, 60 deep and 80 tall; the run settings (Chan-Vese, CFL update, smoothing 0.386, re-init every 5 / step 0.5) are those of the saved 'reaper 2d interactions' session. There are no ground-truth silhouettes, so IoU, false positives/negatives and RMS error are not available."
+   "note": "Synthetic polar renders (290x400 shrunk to 232x320, the height of the sentinel images). Same camera ring as sentinel_polar, with this set's own starting values: camera distance 150, focal 450, level cameras, a starting box 25 wide, 60 deep and 80 tall; the run settings (Chan-Vese, CFL update, smoothing 0.386, re-init every 5 / step 0.5) are those of the saved 'reaper 2d interactions' session. There are no ground-truth silhouettes, so IoU, false positives/negatives and RMS error are not available."
   },
   {
    "id": "zebra",
