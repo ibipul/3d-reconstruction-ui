@@ -348,7 +348,7 @@ def test_bhattacharyya_solver_runs_and_chan_vese_is_still_there():
         out = [s.step() for _ in range(4)]
         assert all(np.isfinite(o["energy"]) for o in out)
     s = Solver(imgs, gts, Config(grid=40, focal=130.0))
-    assert s.cfg.energy == "bhattacharyya" and s.step()["energy"] <= 0.0
+    assert s.cfg.energy == "chan_vese" and s.cfg.update == "cfl" and s.cfg.force_percentile == 25 and s.step()["energy"] <= 0.0
 
 
 def test_rgb_with_identical_channels_matches_grayscale_with_the_cfl_update():

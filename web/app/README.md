@@ -42,7 +42,7 @@ under the MATLAB rule, so Play switches to it.
 
 The **Energy** setting chooses the region energy the surface descends (change it, then *Re-initialise*):
 
-- **Bhattacharyya** (default): the energy is ln B, with B = Σ √(p_in · p_out) over the smoothed colour histograms of the
+- **Bhattacharyya**: the energy is ln B, with B = Σ √(p_in · p_out) over the smoothed colour histograms of the
   pixels inside and outside the surface (32 bins per channel, pooled over all views; with RGB the channels are summed).
   B is 1 when the two histograms are equal and falls toward 0 as they separate, so the energy goes down as the inside and
   outside look more different. The force on each boundary pixel is the gradient of B (Michailovich, Rathi and
@@ -51,7 +51,7 @@ The **Energy** setting chooses the region energy the surface descends (change it
   weights the force just outside the true edge is much stronger than just inside it (the inside is the smaller region),
   and the surface drifts inward. The forces are also scaled to the range of the Chan-Vese ones, because the MATLAB
   normalisations carry fixed stabilising constants.
-- **Chan-Vese**: the MATLAB code's energy, which compares only the mean colour inside and outside.
+- **Chan-Vese** (default): the MATLAB code's energy, which compares only the mean colour inside and outside.
 
 The *Energy* trace shows ln B (at most 0) for Bhattacharyya and minus the squared difference of the means for Chan-Vese,
 so the two are not comparable with each other.

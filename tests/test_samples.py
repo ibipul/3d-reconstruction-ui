@@ -95,7 +95,7 @@ def test_recorded_settings_are_ones_the_app_can_apply(case):
 def test_dataset_run_defaults_are_ones_the_page_can_apply():
     for ds_id, d in _datasets().items():
         run = d.get("run", {})
-        assert run.get("energy", "bhattacharyya") in ("chan_vese", "bhattacharyya"), ds_id
+        assert run.get("energy", "chan_vese") in ("chan_vese", "bhattacharyya"), ds_id
         assert run.get("update", "cfl") in ("cfl", "per_view"), ds_id
         assert 1 <= run.get("forcePercentile", 25) <= 100, ds_id
         assert 0.001 - 1e-12 <= run.get("curvatureWeight", 0.04) <= 10 ** 0.5, ds_id

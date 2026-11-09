@@ -14,7 +14,7 @@ from .solver import Config, ShapeCollapsed, Solver, imnoise_salt_pepper
 
 
 def init_solver(gray_bytes, n, rows, cols, grid, noise, seed, photo_bytes=None, focal=None, distance=None, box=None, box_angle=0.0, camera_height=0.0,
-                energy="bhattacharyya", box_offset=(0.0, 0.0, 0.0), update="cfl",
+                energy="chan_vese", box_offset=(0.0, 0.0, 0.0), update="cfl",
                 force_percentile=25.0):
     """`gray_bytes`: n * rows * cols uint8 ground-truth silhouettes (row-major), used for the metrics
     and, by default, as the solver's input. None for a dataset without ground truth: `photo_bytes` is then

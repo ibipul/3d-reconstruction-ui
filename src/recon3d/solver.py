@@ -52,7 +52,7 @@ class Config:
                                   # or "per_view" (the MATLAB code: each view normalised to a half-voxel step on its own)
     cfl: float = 0.5              # the most any voxel of phi may move in one iteration (voxels): the CFL bound
     force_percentile: float = 25.0  # "cfl": the total force at this percentile of the moving voxels is scaled to the full cfl step
-    energy: str = "bhattacharyya"  # region energy: "bhattacharyya" (histograms) or "chan_vese" (means, as in the MATLAB code)
+    energy: str = "chan_vese"     # region energy: "chan_vese" (means, as in the MATLAB code) or "bhattacharyya" (histograms)
     hist_bins: int = 32           # Bhattacharyya: intensity bins per channel
     hist_sigma: float = 1.0       # Bhattacharyya: smoothing of the histograms, in bins
     hist_eps: float = 1e-4        # Bhattacharyya: probability floor of every bin
