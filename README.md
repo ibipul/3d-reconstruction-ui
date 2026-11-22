@@ -61,6 +61,19 @@ And the software:
 }
 ```
 
+And the dataset ([ibipul/drone-turntable-mv3d](https://huggingface.co/datasets/ibipul/drone-turntable-mv3d) on Hugging Face):
+
+```bibtex
+@misc{islam2026droneturntable,
+  author    = {Islam, Bipul},
+  title     = {drone-turntable-mv3d (Revision 05e9aae)},
+  year      = {2026},
+  publisher = {Hugging Face},
+  doi       = {10.57967/hf/11786},
+  url       = {https://huggingface.co/datasets/ibipul/drone-turntable-mv3d}
+}
+```
+
 ## Quick start
 
 ```sh
