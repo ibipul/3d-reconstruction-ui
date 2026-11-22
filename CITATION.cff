@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite both the software (metadata below) and the paper listed under references."
+message: "If you use this software, please cite both the software (metadata below) and the paper and dataset listed under references."
 type: software
 title: "Interactive 3D Reconstruction"
 abstract: >-
@@ -53,3 +53,15 @@ references:
       - type: other
         value: "arXiv:1910.02738"
         description: arXiv preprint
+  - type: data
+    title: "drone-turntable-mv3d"
+    authors:
+      - family-names: Islam
+        given-names: Bipul
+        orcid: "https://orcid.org/0009-0002-5209-7572"
+    publisher:
+      name: Hugging Face
+    year: 2026
+    version: "05e9aae"
+    doi: "10.57967/hf/11786"
+    url: "https://huggingface.co/datasets/ibipul/drone-turntable-mv3d"
